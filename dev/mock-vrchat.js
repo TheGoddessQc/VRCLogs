@@ -57,6 +57,7 @@ class MockVRChat {
       favs: this.people.slice(0, 6).map((p, i) => ({ userId: p.id, tags: [i < 3 ? 'group_0' : 'group_1'] })) };
   }
   async world(id) { return this.worlds.get(id); }
+  async userDetails(id) { return (await this.friends(false)).concat(await this.friends(true)).find(f => f.id === id); }
   async myAvatars() {
     return ['Juno Collie', 'Goddess Fox', 'Night Dragon', 'Neon Kitty', 'Royal Wolf', 'Pastel Bun'].map((n, i) => ({
       id: `avtr_mock${i}`, name: n, description: 'Avatar de test', image: `https://api.vrchat.cloud/mock/av/${i}`,

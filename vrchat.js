@@ -31,8 +31,14 @@ function trustRank(tags = []) {
   return 'Visitor';
 }
 
+// Les images VRChat ont la forme …/image/file_xxx/1/256 : le dernier nombre est la largeur.
+// On peut demander une version plus grande en changeant ce nombre.
+const bigger = url => (url || '').replace(/\/image\/(file_[^/]+)\/(\d+)\/\d+$/, '/image/$1/$2/1024');
+
 // On garde seulement les infos utiles d'un ami
+// (VRChat a changé ses champs avec le temps : on essaie les nouveaux puis les anciens)
 function summarizeUser(u, online) {
+  const thumb = u.currentAvatarThumbnailImageUrl || u.currentAvatarImageUrl || '';
   return {
     id: u.id,
     name: u.displayName,
@@ -40,9 +46,9 @@ function summarizeUser(u, online) {
     statusDescription: u.statusDescription || '',
     location: u.location || 'offline',      // "wrld_…:instance", "private", "traveling", "offline"
     platform: u.last_platform || '',
-    avatarThumb: u.currentAvatarThumbnailImageUrl || '',
-    avatarImage: u.currentAvatarImageUrl || '',
-    icon: u.userIcon || u.profilePicOverrideThumbnail || u.profilePicOverride || '',
+    avatarThumb: thumb,
+    avatarImage: bigger(u.currentAvatarImageUrl || thumb),
+    icon: u.userIcon || u.iconUrl || u.profilePicOverrideThumbnail || u.profilePicOverride || '',
     bio: u.bio || '',
     lastLogin: u.last_login || null,
     rank: trustRank(u.tags),
@@ -173,6 +179,11 @@ class VRChat {
       groups: groups.map(g => ({ name: g.name, displayName: g.displayName })),
       favs: favs.map(f => ({ userId: f.favoriteId, tags: f.tags || [] })),
     };
+  }
+  // Fiche complète d'un joueur (la liste d'amis ne contient pas la bio)
+  async userDetails(id) {
+    const u = await this.request('GET', `/users/${encodeURIComponent(id)}`);
+    return summarizeUser(u, u.state === 'online' || (u.location && u.location !== 'offline'));
   }
   async world(id) {
     if (this.worlds.has(id)) return this.worlds.get(id);

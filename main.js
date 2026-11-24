@@ -6,6 +6,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { LogParser, parseInstance } = require('./parser');
 const { VRChat } = require('./vrchat');
+const { AvatarSearch, UA } = require('./avatars');
 
 // "vrcimg://" = notre propre adresse pour afficher les images VRChat (avatars, mondes).
 // Elles passent par main.js, qui les télécharge proprement et les garde en cache.
@@ -203,6 +204,11 @@ ipcMain.handle('vrc:logout', async () => {
   sendSocial();
 });
 ipcMain.handle('vrc:refresh', () => refreshFriends(true));
+ipcMain.handle('vrc:user', async (_e, id) => {
+  try { return await vrc.userDetails(id); } catch (e) { return { error: e.message }; }
+});
+let avatarSearch = null;
+ipcMain.handle('avatar:lookup', (_e, { name, author }) => avatarSearch.lookup(name, author));
 ipcMain.handle('vrc:avatars', async () => {
   try { return { avatars: await vrc.myAvatars() }; } catch (e) { return { error: e.message }; }
 });
@@ -212,13 +218,16 @@ function serveImage(req) {
   return (async () => {
     try {
       const u = new URL(req.url).searchParams.get('u');
-      if (!/(^|\.)vrchat\.(cloud|com)$/.test(new URL(u).hostname)) return new Response('', { status: 403 });
+      const host = new URL(u).hostname;
+      const isVRChat = /(^|\.)vrchat\.(cloud|com)$/.test(host);
+      if (!isVRChat && host !== 'thumb.avtrdb.com') return new Response('', { status: 403 });
       const fp = path.join(IMG_DIR, crypto.createHash('sha1').update(u).digest('hex'));
       if (fs.existsSync(fp)) {
         const type = fs.existsSync(fp + '.t') ? fs.readFileSync(fp + '.t', 'utf8') : 'image/png';
         return new Response(fs.readFileSync(fp), { headers: { 'Content-Type': type } });
       }
-      const res = await vrc.fetchImage(u);
+      // Images VRChat : avec la session. Images avtrDB : SANS (tes cookies restent chez VRChat).
+      const res = isVRChat ? await vrc.fetchImage(u) : await fetch(u, { headers: { 'User-Agent': UA } });
       if (!res.ok) return new Response('', { status: res.status });
       const type = res.headers.get('content-type') || 'image/png';
       const buf = Buffer.from(await res.arrayBuffer());
@@ -233,6 +242,7 @@ function serveImage(req) {
 
 function startVRChat() {
   fs.mkdirSync(IMG_DIR, { recursive: true });
+  avatarSearch = new AvatarSearch(DATA_DIR);
   // Mode test (développement seulement) : de faux amis pour vérifier l'affichage
   if (process.env.VRCLOGS_MOCK) vrc = new (require('./dev/mock-vrchat'))(allEvents);
   else vrc = new VRChat(DATA_DIR);
@@ -266,6 +276,16 @@ function createWindow() {
     if (level >= 2) console.log(`[UI] ${message} (${path.basename(source)}:${line})`);
   });
 
+  // Mode diagnostic : VRCLOGS_EVAL="code" → exécute ce code dans l'interface, affiche le résultat, quitte
+  if (process.env.VRCLOGS_EVAL) {
+    win.webContents.once('did-finish-load', async () => {
+      await new Promise(r => setTimeout(r, 8000));
+      try { console.log('[EVAL]', JSON.stringify(await win.webContents.executeJavaScript(process.env.VRCLOGS_EVAL), null, 1)); }
+      catch (e) { console.log('[EVAL] erreur', e.message); }
+      app.quit();
+    });
+  }
+
   // Mode test : VRCLOGS_SHOT=dossier → capture chaque onglet puis quitte
   if (process.env.VRCLOGS_SHOT) {
     win.webContents.once('did-finish-load', async () => {
@@ -279,6 +299,11 @@ function createWindow() {
         ['friend', `document.querySelector('.fcard[data-friend]').click()`],
         ['avatar-zoom', `document.querySelector('[data-zoom]').click()`],
         ['avatars', `hideModal(); goTo('avatars')`],
+        ['avatar-history', `hideModal(); openPlayer([...M.players.values()].sort((a, b) => b.avatarHist.length - a.avatarHist.length)[0].key); setTimeout(() => document.querySelector('.avrow')?.scrollIntoView(), 50)`],
+        ['avatar-history-done', `new Promise(r => setTimeout(r, 9000))`],
+        ['avatar-public', `document.querySelector('.avrow.public')?.click()`],
+        ['login', `hideModal(); goTo('friends'); const u = document.getElementById('loginUser'); if (u) { u.focus(); u.value = 'test-ecriture'; }`],
+        ['login-after', `void 0`],
       ];
       for (const [name, js] of steps) {
         try { await win.webContents.executeJavaScript(js); } catch { continue; } // étape impossible (ex : pas connecté)

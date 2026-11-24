@@ -53,6 +53,10 @@ class LogParser {
     if ((r = /^\[Behaviour\] Switching (.+) to avatar (.+)$/.exec(msg))) {
       return { t, file, type: 'avatar', name: r[1], avatar: r[2] };
     }
+    // Le nom du créateur de l'avatar : "Unpacking Avatar (Nom by Créateur)"
+    if ((r = /^\[AssetBundleDownloadManager\] \[\d+\] Unpacking Avatar \((.+) by (.+?)\)$/.exec(msg))) {
+      return { t, file, type: 'avatarinfo', avatar: r[1], author: r[2] };
+    }
     if ((r = /^\[Video Playback\] Attempting to resolve URL '(.+)'$/.exec(msg))) {
       return { t, file, type: 'video', url: r[1] };
     }

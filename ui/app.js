@@ -25,7 +25,7 @@ const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? d
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const FAVS = new Set(load('favs', []));
 const META = load('meta', {}); // { cléJoueur: { note: '...', tags: ['ami', ...] } }
-const SETTINGS = Object.assign({ theme: 'goddess', compact: false, anim: true }, load('settings', {}));
+const SETTINGS = Object.assign({ theme: 'goddess', compact: false, anim: true, avtrdb: true }, load('settings', {}));
 const ALERTS = Object.assign({ favs: true, friendOnline: true, newPeople: false, minMeets: 0, tags: [], silent: false }, load('alerts', {}));
 
 // ---------- Petits outils ----------
@@ -72,6 +72,7 @@ function build() {
   const sessions = [];          // un "passage" dans un monde
   const players = new Map();    // Map = dictionnaire clé → valeur
   const nameToKey = new Map();  // pseudo → identifiant (pour les avatars)
+  const avAuthor = new Map();   // nom d'avatar → créateur
   let self = null;
   let cur = null;               // la session en cours pendant la lecture
   let lastT = 0;
@@ -158,6 +159,9 @@ function build() {
         if (!h.length || h[h.length - 1].avatar !== e.avatar) h.push({ t: e.t, avatar: e.avatar, world: cur?.world });
         break;
       }
+      case 'avatarinfo': // qui a créé cet avatar (pour mieux le retrouver dans la base publique)
+        avAuthor.set(e.avatar, e.author);
+        break;
       case 'video':
         if (cur) cur.videos.push(e);
         break;
@@ -166,7 +170,7 @@ function build() {
         close(e.t);
         break;
     }
-    if (cur && e.type !== 'self') cur.events.push(e);
+    if (cur && e.type !== 'self' && e.type !== 'avatarinfo') cur.events.push(e);
   }
 
   let current = null;
@@ -180,7 +184,7 @@ function build() {
   }
   if (self) players.delete(self.id);
 
-  M = { sessions, players, self, current };
+  M = { sessions, players, self, current, avAuthor };
   M.groups = detectGroups();
 }
 
@@ -554,6 +558,7 @@ function openPlayer(key) {
   const p = M.players.get(key);
   if (!p) return;
   openPlayerKey = key;
+  lastSheet = { type: 'player', id: key };
   const meta = META[key] || {};
   const worlds = [...p.worlds.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
   const sess = p.sessions.slice().reverse().slice(0, 30).map(id => M.sessions[id]);
@@ -584,8 +589,7 @@ function openPlayer(key) {
     ${p.names.size > 1 ? `<h2>Anciens pseudos</h2><div class="tags">${[...p.names].map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : ''}
     <h2>Mondes où vous étiez ensemble</h2>
     ${worlds.map(([w, ms]) => hbar(esc(w), ms, worlds[0][1] || 1, fmtDur(ms))).join('')}
-    ${p.avatarHist.length ? `<h2>🎭 Historique des avatars</h2>
-      <div class="list">${p.avatarHist.slice().reverse().slice(0, 40).map(a => `<div class="row"><span class="time">${fmtDT(a.t)}</span><span class="ico t-avatar">🎭</span><span><b>${esc(a.avatar)}</b>${a.world ? `<span class="ctx"> · ${esc(a.world)}</span>` : ''}</span></div>`).join('')}</div>` : ''}
+    ${avatarHistoryHtml(p, 40, '🎭 Historique des avatars')}
     <h2>Rencontres récentes</h2>
     <div class="list">${sess.map(s => `<div class="row"><span class="time">${fmtDT(s.start)}</span><span class="ico">🌍</span><span>${sLink(s.id, s.world)} <span class="ctx">· ${fmtDur((s.people.get(key)?.time || 0) + (s === M.current ? liveExtra(key) : 0))} ensemble</span></span></div>`).join('')}</div>`);
 
@@ -600,6 +604,68 @@ function openPlayer(key) {
     openPlayer(key);
     $('tagInput').focus();
   };
+  resolveAvatars();
+}
+
+// ---------------------------------------------------------------------
+//  Historique des avatars : public (on peut le voir) ou privé
+// ---------------------------------------------------------------------
+const AV_RESULTS = new Map(); // nom d'avatar → résultat de la recherche
+let lastSheet = null;         // dernière fiche ouverte : { type: 'player' | 'friend', id }
+function avatarHistoryHtml(p, limit, title) {
+  if (!p.avatarHist.length) return '';
+  const rows = p.avatarHist.slice().reverse().slice(0, limit).map(a => `
+    <div class="row avrow" data-avrow="${esc(a.avatar)}">
+      <span class="time">${fmtDT(a.t)}</span>
+      <span class="ico avthumb">🎭</span>
+      <span><b>${esc(a.avatar)}</b>${M.avAuthor.get(a.avatar) ? ` <span class="ctx">par ${esc(M.avAuthor.get(a.avatar))}</span>` : ''}${a.world ? `<span class="ctx"> · ${esc(a.world)}</span>` : ''}</span>
+      <span class="avstate"><span class="muted">…</span></span>
+    </div>`).join('');
+  return `<h2>${title}</h2><div class="list">${rows}</div>`;
+}
+// Met à jour chaque ligne quand on connaît la réponse
+function paintAvatarRows(name, r) {
+  document.querySelectorAll(`[data-avrow="${CSS.escape(name)}"]`).forEach(row => {
+    const state = row.querySelector('.avstate');
+    if (r.found) {
+      row.classList.add('public');
+      row.dataset.avview = name;
+      row.querySelector('.avthumb').innerHTML = r.explicit ? '🔞' : vimg(r.image, 'avmini');
+      state.innerHTML = `<span class="badge pub">🌍 Public · Voir</span>`;
+    } else if (r.found === false) {
+      state.innerHTML = `<span class="badge priv" title="Introuvable dans la base des avatars publics : privé (ou pas encore répertorié)">🔒 Privé</span>`;
+    } else {
+      state.innerHTML = `<span class="muted" title="${esc(r.error || '')}">⚠️ hors ligne</span>`;
+    }
+  });
+}
+async function resolveAvatars() {
+  if (!SETTINGS.avtrdb) {
+    document.querySelectorAll('.avrow .avstate').forEach(s => { s.innerHTML = ''; });
+    return;
+  }
+  const names = [...new Set([...document.querySelectorAll('[data-avrow]')].map(r => r.dataset.avrow))].slice(0, 25);
+  for (const name of names) {
+    let r = AV_RESULTS.get(name);
+    if (!r) {
+      r = await window.api.avatarLookup(name, M.avAuthor.get(name) || '');
+      if (!r.error) AV_RESULTS.set(name, r);
+    }
+    paintAvatarRows(name, r);
+  }
+}
+function openAvatarView(name) {
+  const r = AV_RESULTS.get(name);
+  if (!r?.found) return;
+  openZoom(r.explicit ? '' : r.image, r.name, lastSheet, 'avtrDB'); // "← Retour" ramène à la fiche d'où on vient
+  $('modalBody').insertAdjacentHTML('beforeend', `
+    <div class="card avinfo">
+      ${r.explicit ? '<p>🔞 Image masquée : cet avatar est marqué comme contenu pour adultes.</p>' : ''}
+      <div>👤 Créé par <b>${esc(r.author || 'inconnu')}</b></div>
+      <div class="tags">${r.platforms.map(p => `<span class="badge">${{ pc: '💻 PC', android: '📱 Quest/Android', ios: '📱 iOS' }[p] || esc(p)}</span>`).join('')}</div>
+      <div class="fbtns"><a class="ghost btn" data-url="https://vrchat.com/home/avatar/${esc(r.id)}">Voir sur VRChat ↗</a></div>
+      <p class="muted">Recherche d'avatars publics fournie par avtrDB.</p>
+    </div>`);
 }
 function setMeta(key, patch) {
   META[key] = Object.assign({ note: '', tags: [] }, META[key], patch);
@@ -711,6 +777,7 @@ let FRIENDS = new Map();          // id → ami
 let vrcFavGroups = new Map();     // id → [noms des groupes de favoris VRChat]
 let pending2fa = null;            // méthodes de code demandées par VRChat
 let loginError = '';
+let loginDraft = '';              // le pseudo en cours de saisie (pour ne jamais l'effacer)
 let friendFilter = 'all';         // all | game | web | offline
 let friendGroup = '';             // '' | 'local' | nom d'un groupe VRChat
 let myAvatars = null;             // liste chargée à la demande
@@ -755,7 +822,17 @@ function setVRC(s) {
   }
 }
 
-function renderFriends() {
+// Redessine une page sans perdre le champ où tu étais en train d'écrire
+function keepFocus(draw) {
+  const a = document.activeElement;
+  const id = a?.id, pos = a?.selectionStart;
+  draw();
+  const n = id && document.getElementById(id);
+  if (n && n !== document.activeElement) { n.focus(); if (pos != null && n.setSelectionRange) n.setSelectionRange(pos, pos); }
+}
+
+function renderFriends() { keepFocus(drawFriends); }
+function drawFriends() {
   const el = $('view-friends');
   if (!VRC.user) return renderLogin(el);
   const q = ($('friendSearch')?.value || '').trim().toLowerCase();
@@ -785,6 +862,7 @@ function renderFriends() {
         ${groupOptions}
       </select>
       <button class="ghost" id="friendRefresh" title="Actualiser">🔄</button>
+      <button class="ghost" id="vrcLogout" title="Se déconnecter du compte VRChat">🚪 Se déconnecter</button>
     </header>
     <div class="chips">
       ${[['all', 'Tous'], ['game', '🎮 En jeu'], ['web', '🌐 Sur le site'], ['offline', '💤 Hors ligne']]
@@ -794,8 +872,7 @@ function renderFriends() {
     ${section(friendGroup ? 'Amis' : 'Tous les amis', rest)}
     ${!list.length ? `<div class="empty">${VRC.updated ? 'Aucun ami ne correspond.' : 'Chargement de tes amis…'}</div>` : ''}`;
 
-  const s = $('friendSearch');
-  s.oninput = () => { const pos = s.selectionStart; renderFriends(); const n = $('friendSearch'); n.focus(); n.setSelectionRange(pos, pos); };
+  $('friendSearch').oninput = renderFriends;
   $('friendGroup').onchange = e => { friendGroup = e.target.value; renderFriends(); };
   $('friendRefresh').onclick = () => { window.api.vrc.refresh(); toast('🔄 Actualisation des amis…'); };
 }
@@ -843,7 +920,7 @@ function renderLogin(el) {
     <h1>💜 Connecte ton compte VRChat</h1>
     <p class="muted">Pour voir ta liste d'amis, tes favoris et les avatars. C'est <b>optionnel</b> : le reste de VRCLogs fonctionne sans.</p>
     <form id="loginForm">
-      <input id="loginUser" autocomplete="username" placeholder="Pseudo ou e-mail VRChat" required>
+      <input id="loginUser" autocomplete="username" placeholder="Pseudo ou e-mail VRChat" value="${esc(loginDraft)}" required>
       <input id="loginPass" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
       <button class="primary">Se connecter</button>
     </form>
@@ -854,6 +931,7 @@ function renderLogin(el) {
       <li>⚠️ Comme VRCX, VRCLogs utilise l'API web de VRChat, qui n'est pas officiellement documentée.</li>
     </ul>
   </div>`;
+  $('loginUser').oninput = e => { loginDraft = e.target.value; }; // on retient ce que tu tapes
   $('loginForm').onsubmit = async e => {
     e.preventDefault();
     const btn = e.submitter; btn.disabled = true; btn.textContent = 'Connexion…';
@@ -871,6 +949,7 @@ function openFriend(id) {
   const f = FRIENDS.get(id);
   if (!f) return;
   openFriendId = id;
+  lastSheet = { type: 'friend', id };
   const p = M.players.get(id);
   const wid = f.location?.startsWith('wrld_') ? f.location.split(':')[0] : null;
   const canJoin = wid && f.instType && !/^Invite$/.test(f.instType);
@@ -897,7 +976,7 @@ function openFriend(id) {
           ${canJoin ? `<a class="ghost btn" data-url="vrchat://launch?ref=vrclogs&id=${esc(f.location)}">🚀 Rejoindre</a>` : ''}</div>` : ''}
       </div>
     </div>
-    ${f.bio ? `<h2>Bio</h2><div class="card bio">${esc(f.bio)}</div>` : ''}
+    <div id="fbio">${f.bio ? `<h2>Bio</h2><div class="card bio">${esc(f.bio)}</div>` : ''}</div>
     ${p ? `<h2>Avec toi (d'après tes logs)</h2>
       <div class="kpis">
         <div class="card kpi"><div class="v">${p.sessions.length}</div><div class="l">Rencontres</div></div>
@@ -905,17 +984,23 @@ function openFriend(id) {
         <div class="card kpi"><div class="v">${p.worlds.size}</div><div class="l">Mondes partagés</div></div>
         <div class="card kpi"><div class="v">${ago(p.last)}</div><div class="l">Dernière fois</div></div>
       </div>
-      ${p.avatarHist.length ? `<h2>🎭 Ses derniers avatars</h2><div class="tags">${[...new Set(p.avatarHist.slice().reverse().map(a => a.avatar))].slice(0, 12).map(a => `<span class="tag">🎭 ${esc(a)}</span>`).join('')}</div>` : ''}`
+      ${avatarHistoryHtml(p, 10, '🎭 Ses derniers avatars')}`
       : '<p class="muted">Vous ne vous êtes pas encore croisés dans tes logs.</p>'}`);
+  resolveAvatars();
+  // La liste d'amis ne contient pas la bio : on va chercher la fiche complète
+  window.api.vrc.user(id).then(d => {
+    if (!d || d.error || lastSheet?.id !== id || !$('fbio')) return;
+    if (d.bio) $('fbio').innerHTML = `<h2>Bio</h2><div class="card bio">${esc(d.bio)}</div>`;
+  });
 }
 
 // Visionneuse : une image en grand
-function openZoom(url, title = '', back = null) {
+function openZoom(url, title = '', back = null, source = 'VRChat') {
   showModal(`<div class="zoom">
     ${back ? `<button class="ghost" data-${back.type}="${esc(back.id)}">← Retour</button>` : ''}
     ${title ? `<h1>${esc(title)}</h1>` : ''}
     ${vimg(url, 'zoomimg')}
-    <p class="muted">👀 Image d'aperçu fournie par VRChat. Pour respecter les créateurs, VRCLogs permet de regarder les avatars, jamais de les télécharger ou de les copier.</p>
+    <p class="muted">👀 Image d'aperçu fournie par ${source}. Pour respecter les créateurs, VRCLogs permet de regarder les avatars, jamais de les télécharger ou de les copier.</p>
   </div>`);
 }
 
@@ -1010,6 +1095,7 @@ function openSettings(tab = settingsTab) {
       <div class="opt"><span>⭐ ${FAVS.size} favori(s) · 📝 ${Object.values(META).filter(m => m.note).length} note(s) · 🏷️ ${Object.values(META).filter(m => m.tags?.length).length} joueur(s) tagués</span></div>
       <div class="opt"><span>💜 Compte VRChat : ${VRC.user ? `connecté(e) en tant que <b>${esc(VRC.user.name)}</b>` : 'non connecté'}</span>
         ${VRC.user ? '<button class="ghost" id="vrcLogout">Se déconnecter</button>' : '<button class="ghost" data-goto="friends">Se connecter</button>'}</div>
+      <label class="opt"><span>🔎 Chercher les avatars publics dans avtrDB <span class="muted">— envoie seulement le nom de l'avatar</span></span><input type="checkbox" data-set="avtrdb" ${SETTINGS.avtrdb ? 'checked' : ''}></label>
       <button class="ghost" id="openData">💾 Ouvrir le dossier de sauvegarde</button>
       <button class="ghost" id="openLogs">📁 Ouvrir le dossier des logs VRChat</button>`;
   }
@@ -1120,11 +1206,18 @@ document.addEventListener('click', e => {
     const f = FRIENDS.get(openFriendId);
     return openZoom(el.dataset.zoom, f ? `Avatar de ${f.name}` : '', f ? { type: 'friend', id: f.id } : null);
   }
+  if ((el = hit('[data-avview]'))) return openAvatarView(el.dataset.avview);
   if ((el = hit('[data-friend]'))) return openFriend(el.dataset.friend);
   if ((el = hit('[data-avatar]'))) return openAvatar(el.dataset.avatar);
   if ((el = hit('[data-ffilter]'))) { friendFilter = el.dataset.ffilter; return renderFriends(); }
   if ((el = hit('[data-goto]'))) return goTo(el.dataset.goto);
-  if ((el = hit('#vrcLogout'))) { window.api.vrc.logout(); myAvatars = null; hideModal(); return toast('👋 Déconnecté(e) de VRChat'); }
+  if ((el = hit('#vrcLogout'))) {
+    if (!confirm('Se déconnecter du compte VRChat ?\nTes logs, notes et favoris restent sur ton PC.')) return;
+    window.api.vrc.logout();
+    myAvatars = null;
+    hideModal();
+    return toast('👋 Déconnecté(e) de VRChat');
+  }
   if ((el = hit('[data-url]'))) return window.api.openUrl(el.dataset.url);
   if ((el = hit('[data-player]'))) return openPlayer(el.dataset.player);
   if ((el = hit('[data-session]'))) return openSession(+el.dataset.session);
@@ -1162,6 +1255,7 @@ applySettings();
     setVRC(s);
     if (!s.user) myAvatars = null;
     if (!$('modal').classList.contains('hidden')) return;
+    if (!s.user && !wasLogged) return; // toujours déconnecté : on ne touche pas au formulaire de connexion
     if (['friends', 'avatars'].includes(currentView) || wasLogged !== !!s.user) render();
   });
 
@@ -1174,6 +1268,9 @@ applySettings();
     checkAlerts(evs);
     // On ne redessine pas si une fenêtre est ouverte (pour ne pas te déranger pendant que tu écris une note)
     if (!$('modal').classList.contains('hidden')) return;
+    // Les pages Amis et Avatars ne dépendent pas des logs : on ne les redessine pas
+    // (sinon ce que tu es en train de taper serait effacé à chaque seconde)
+    if (['friends', 'avatars'].includes(currentView)) return;
     if (currentView !== 'feed' || document.querySelector('main').scrollTop < 50) render();
   });
   window.api.onStatus(s => {

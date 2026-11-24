@@ -18,6 +18,7 @@
       "parser.js",
       "preload.js",
       "vrchat.js",
+      "avatars.js",
       "ui/**/*",
       "build/icon.png"
     ],
