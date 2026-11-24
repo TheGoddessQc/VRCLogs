@@ -26,7 +26,7 @@ const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const FAVS = new Set(load('favs', []));
 const META = load('meta', {}); // { cléJoueur: { note: '...', tags: ['ami', ...] } }
 const SETTINGS = Object.assign({ theme: 'goddess', compact: false, anim: true }, load('settings', {}));
-const ALERTS = Object.assign({ favs: true, newPeople: false, minMeets: 0, tags: [], silent: false }, load('alerts', {}));
+const ALERTS = Object.assign({ favs: true, friendOnline: true, newPeople: false, minMeets: 0, tags: [], silent: false }, load('alerts', {}));
 
 // ---------- Petits outils ----------
 const $ = id => document.getElementById(id);
@@ -285,7 +285,7 @@ function renderLive() {
       const isNew = Date.now() - since < 6000;
       return `<div class="pcard ${FAVS.has(k) ? 'fav' : ''} ${isNew ? 'new' : ''}" data-player="${esc(k)}">
         ${dot(k, p?.name || k)}
-        <div><div class="n">${FAVS.has(k) ? '⭐ ' : ''}${esc(p?.name || k)} ${tagChips(k)}</div>
+        <div><div class="n">${FAVS.has(k) ? '⭐ ' : ''}${esc(p?.name || k)} ${FRIENDS.has(k) ? '<span class="badge">💜 Ami</span>' : ''} ${tagChips(k)}</div>
         <div class="s">Ici depuis ${fmtDur(Date.now() - since)} · ${meets === 1 ? 'Première rencontre ✨' : `Vu ${meets} fois · ${fmtDur(playerTime(p))} au total`}</div>
         ${META[k]?.note ? `<div class="s note">📝 ${esc(META[k].note)}</div>` : ''}</div>
       </div>`;
@@ -703,6 +703,265 @@ function renderStats() {
 }
 
 // =====================================================================
+//  AMIS (compte VRChat)
+//  Les données viennent de main.js → vrchat.js. Ici on ne fait qu'afficher.
+// =====================================================================
+let VRC = { user: null, friends: [], favorites: { groups: [], favs: [] }, updated: 0, error: null };
+let FRIENDS = new Map();          // id → ami
+let vrcFavGroups = new Map();     // id → [noms des groupes de favoris VRChat]
+let pending2fa = null;            // méthodes de code demandées par VRChat
+let loginError = '';
+let friendFilter = 'all';         // all | game | web | offline
+let friendGroup = '';             // '' | 'local' | nom d'un groupe VRChat
+let myAvatars = null;             // liste chargée à la demande
+
+// Une image VRChat passe par notre adresse "vrcimg://" (voir main.js)
+const vimg = (url, cls = '') => url ? `<img class="${cls}" src="vrcimg://img/?u=${encodeURIComponent(url)}" loading="lazy" alt="">` : '';
+// Si une image ne charge pas, on la cache au lieu d'afficher une icône cassée
+document.addEventListener('error', e => { if (e.target.tagName === 'IMG') e.target.classList.add('broken'); }, true);
+
+const STATUS_COLORS = { 'join me': '#42a5ff', active: '#5ee6a0', 'ask me': '#ffa94d', busy: '#ff5c6c', offline: '#777' };
+const STATUS_NAMES = { 'join me': 'Rejoins-moi', active: 'En ligne', 'ask me': 'Demande-moi', busy: 'Occupé(e)', offline: 'Hors ligne' };
+const PLATFORMS = { standalonewindows: '💻 PC', android: '📱 Quest/Android', ios: '📱 iOS', web: '🌐 Site' };
+
+function friendCategory(f) {
+  if (!f.online) return 'offline';
+  return f.location === 'offline' ? 'web' : 'game';
+}
+function isFavFriend(id) { return FAVS.has(id) || vrcFavGroups.has(id); }
+function friendWhere(f) {
+  if (f.location?.startsWith('wrld_')) return `🌍 ${esc(f.world?.name || 'Monde inconnu')} <span class="badge">${esc(f.instType || '')}</span>`;
+  if (f.location === 'private') return '🔒 Instance privée';
+  if (f.location === 'traveling') return '✈️ En déplacement';
+  if (f.online) return '🌐 Sur le site ou l\'app';
+  return `💤 Hors ligne${f.lastLogin ? ` · vu ${ago(Date.parse(f.lastLogin))}` : ''}`;
+}
+
+function setVRC(s) {
+  const before = FRIENDS;
+  VRC = s;
+  FRIENDS = new Map(s.friends.map(f => [f.id, f]));
+  vrcFavGroups = new Map();
+  const gName = new Map(s.favorites.groups.map(g => [g.name, g.displayName]));
+  for (const f of s.favorites.favs) vrcFavGroups.set(f.userId, f.tags.map(t => gName.get(t) || t));
+  const online = s.friends.filter(f => f.online).length;
+  $('friendCount').textContent = s.user ? online : '';
+  // Alerte : un ami favori vient de se connecter
+  if (ALERTS.friendOnline && before.size) {
+    for (const f of s.friends) {
+      const old = before.get(f.id);
+      if (f.online && old && !old.online && isFavFriend(f.id)) notify(`💜 ${f.name} est en ligne`, friendWhere(f).replace(/<[^>]+>/g, ''));
+    }
+  }
+}
+
+function renderFriends() {
+  const el = $('view-friends');
+  if (!VRC.user) return renderLogin(el);
+  const q = ($('friendSearch')?.value || '').trim().toLowerCase();
+  const counts = { all: VRC.friends.length, game: 0, web: 0, offline: 0 };
+  for (const f of VRC.friends) counts[friendCategory(f)]++;
+
+  let list = VRC.friends.filter(f =>
+    (friendFilter === 'all' || friendCategory(f) === friendFilter) &&
+    (!friendGroup || (friendGroup === 'local' ? FAVS.has(f.id) : (vrcFavGroups.get(f.id) || []).includes(friendGroup))) &&
+    (!q || f.name.toLowerCase().includes(q) || (f.world?.name || '').toLowerCase().includes(q) || f.statusDescription.toLowerCase().includes(q)));
+  const order = { game: 0, web: 1, offline: 2 };
+  list.sort((a, b) => order[friendCategory(a)] - order[friendCategory(b)] || a.name.localeCompare(b.name));
+
+  const favs = list.filter(f => isFavFriend(f.id));
+  const rest = list.filter(f => !isFavFriend(f.id));
+  const section = (title, arr) => arr.length ? `<h2>${title} <span class="muted">(${arr.length})</span></h2><div class="fgrid">${arr.map(friendCard).join('')}</div>` : '';
+  const groupOptions = VRC.favorites.groups.map(g => `<option value="${esc(g.displayName)}" ${friendGroup === g.displayName ? 'selected' : ''}>💜 ${esc(g.displayName)}</option>`).join('');
+
+  el.innerHTML = `
+    <header class="bar">
+      <div class="me">${vimg(VRC.user.avatarThumb, 'meimg')}<div><h1>Amis</h1>
+        <div class="muted">Connecté(e) : <b>${esc(VRC.user.name)}</b> · ${VRC.updated ? `mis à jour ${ago(VRC.updated)}` : 'chargement…'}${VRC.error ? ` · <span class="t-leave">⚠️ ${esc(VRC.error)}</span>` : ''}</div></div></div>
+      <input id="friendSearch" type="search" placeholder="Nom, monde, statut…" value="${esc(q)}">
+      <select id="friendGroup">
+        <option value="">Tous les groupes</option>
+        <option value="local" ${friendGroup === 'local' ? 'selected' : ''}>⭐ Mes favoris VRCLogs</option>
+        ${groupOptions}
+      </select>
+      <button class="ghost" id="friendRefresh" title="Actualiser">🔄</button>
+    </header>
+    <div class="chips">
+      ${[['all', 'Tous'], ['game', '🎮 En jeu'], ['web', '🌐 Sur le site'], ['offline', '💤 Hors ligne']]
+        .map(([k, n]) => `<button class="chip ${friendFilter === k ? 'on' : ''}" data-ffilter="${k}">${n} <span class="muted">${counts[k]}</span></button>`).join('')}
+    </div>
+    ${section('⭐ Favoris', favs)}
+    ${section(friendGroup ? 'Amis' : 'Tous les amis', rest)}
+    ${!list.length ? `<div class="empty">${VRC.updated ? 'Aucun ami ne correspond.' : 'Chargement de tes amis…'}</div>` : ''}`;
+
+  const s = $('friendSearch');
+  s.oninput = () => { const pos = s.selectionStart; renderFriends(); const n = $('friendSearch'); n.focus(); n.setSelectionRange(pos, pos); };
+  $('friendGroup').onchange = e => { friendGroup = e.target.value; renderFriends(); };
+  $('friendRefresh').onclick = () => { window.api.vrc.refresh(); toast('🔄 Actualisation des amis…'); };
+}
+
+function friendCard(f) {
+  const p = M.players.get(f.id);
+  const groups = vrcFavGroups.get(f.id) || [];
+  return `<div class="fcard ${friendCategory(f)}" data-friend="${esc(f.id)}">
+    <div class="fimg">${dot(f.id, f.name, 'big')}${vimg(f.avatarThumb)}<span class="sdot" style="background:${STATUS_COLORS[f.online ? f.status : 'offline'] || '#777'}"></span></div>
+    <div class="finfo">
+      <div class="n"><span class="star ${FAVS.has(f.id) ? 'on' : ''}" data-fav="${esc(f.id)}" title="Favori VRCLogs (alertes)">★</span> ${esc(f.name)}</div>
+      ${f.statusDescription ? `<div class="s">${esc(f.statusDescription)}</div>` : ''}
+      <div class="s where">${friendWhere(f)}</div>
+      <div class="s">${p ? `🕒 ${fmtDur(playerTime(p))} ensemble` : ''}${groups.length ? ` · 💜 ${groups.map(esc).join(', ')}` : ''}</div>
+    </div>
+  </div>`;
+}
+
+function renderLogin(el) {
+  if (pending2fa) {
+    const m = pending2fa.includes('totp') ? 'totp' : pending2fa.includes('emailOtp') ? 'emailOtp' : 'otp';
+    const label = { totp: 'le code de ton application d\'authentification (6 chiffres)', emailOtp: 'le code reçu par e-mail', otp: 'un code de récupération' }[m];
+    el.innerHTML = `<div class="login card">
+      <h1>🔐 Double authentification</h1>
+      <p>VRChat demande ${label}.</p>
+      <form id="tfaForm">
+        <input id="tfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Code" required>
+        <input type="hidden" id="tfaMethod" value="${m}">
+        <button class="primary">Valider</button>
+        <button type="button" class="ghost" id="tfaCancel">Annuler</button>
+      </form>
+      ${loginError ? `<p class="t-leave">⚠️ ${esc(loginError)}</p>` : ''}
+    </div>`;
+    $('tfaCode').focus();
+    $('tfaCancel').onclick = () => { pending2fa = null; loginError = ''; renderFriends(); };
+    $('tfaForm').onsubmit = async e => {
+      e.preventDefault();
+      const r = await window.api.vrc.verify2fa($('tfaMethod').value, $('tfaCode').value);
+      if (r.error) { loginError = r.error; return renderFriends(); }
+      pending2fa = null; loginError = '';
+    };
+    return;
+  }
+  el.innerHTML = `<div class="login card">
+    <h1>💜 Connecte ton compte VRChat</h1>
+    <p class="muted">Pour voir ta liste d'amis, tes favoris et les avatars. C'est <b>optionnel</b> : le reste de VRCLogs fonctionne sans.</p>
+    <form id="loginForm">
+      <input id="loginUser" autocomplete="username" placeholder="Pseudo ou e-mail VRChat" required>
+      <input id="loginPass" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
+      <button class="primary">Se connecter</button>
+    </form>
+    ${loginError ? `<p class="t-leave">⚠️ ${esc(loginError)}</p>` : ''}
+    <ul class="privacy">
+      <li>🔒 Ton mot de passe est envoyé <b>uniquement à VRChat</b> et n'est <b>jamais enregistré</b>.</li>
+      <li>🔑 Seul le jeton de session est gardé, <b>chiffré par Windows</b>, sur ton PC.</li>
+      <li>⚠️ Comme VRCX, VRCLogs utilise l'API web de VRChat, qui n'est pas officiellement documentée.</li>
+    </ul>
+  </div>`;
+  $('loginForm').onsubmit = async e => {
+    e.preventDefault();
+    const btn = e.submitter; btn.disabled = true; btn.textContent = 'Connexion…';
+    const r = await window.api.vrc.login($('loginUser').value.trim(), $('loginPass').value);
+    $('loginPass').value = ''; // on efface le mot de passe tout de suite
+    if (r.error) loginError = r.error;
+    else if (r.need2fa) { pending2fa = r.need2fa; loginError = ''; }
+    else loginError = '';
+    renderFriends();
+  };
+}
+
+let openFriendId = null;
+function openFriend(id) {
+  const f = FRIENDS.get(id);
+  if (!f) return;
+  openFriendId = id;
+  const p = M.players.get(id);
+  const wid = f.location?.startsWith('wrld_') ? f.location.split(':')[0] : null;
+  const canJoin = wid && f.instType && !/^Invite$/.test(f.instType);
+  showModal(`
+    <div class="fhead">
+      <div class="favatar" data-zoom="${esc(f.avatarImage)}" title="Agrandir">${vimg(f.avatarImage || f.avatarThumb)}<span class="zoomhint">🔍</span></div>
+      <div>
+        <h1>${esc(f.name)} <span class="star ${FAVS.has(id) ? 'on' : ''}" data-fav="${esc(id)}" title="Favori">★</span></h1>
+        <div><span class="sdot inline" style="background:${STATUS_COLORS[f.online ? f.status : 'offline']}"></span>
+          ${STATUS_NAMES[f.online ? f.status : 'offline'] || esc(f.status)}${f.statusDescription ? ` — ${esc(f.statusDescription)}` : ''}</div>
+        <div class="muted">${esc(f.rank)}${f.platform ? ` · ${PLATFORMS[f.platform] || esc(f.platform)}` : ''}
+          ${(vrcFavGroups.get(id) || []).map(g => `<span class="badge">💜 ${esc(g)}</span>`).join('')}</div>
+        <div class="fbtns">
+          <a class="ghost btn" data-url="https://vrchat.com/home/user/${esc(id)}">Profil VRChat ↗</a>
+          ${p ? `<a class="ghost btn" data-player="${esc(id)}">📜 Fiche VRCLogs</a>` : ''}
+        </div>
+      </div>
+    </div>
+    <h2>Où ?</h2>
+    <div class="card floc">
+      ${f.world ? vimg(f.world.thumb, 'wthumb') : ''}
+      <div><div>${friendWhere(f)}</div>
+        ${wid ? `<div class="fbtns"><a class="ghost btn" data-url="https://vrchat.com/home/world/${esc(wid)}">Page du monde ↗</a>
+          ${canJoin ? `<a class="ghost btn" data-url="vrchat://launch?ref=vrclogs&id=${esc(f.location)}">🚀 Rejoindre</a>` : ''}</div>` : ''}
+      </div>
+    </div>
+    ${f.bio ? `<h2>Bio</h2><div class="card bio">${esc(f.bio)}</div>` : ''}
+    ${p ? `<h2>Avec toi (d'après tes logs)</h2>
+      <div class="kpis">
+        <div class="card kpi"><div class="v">${p.sessions.length}</div><div class="l">Rencontres</div></div>
+        <div class="card kpi"><div class="v">${fmtDur(playerTime(p))}</div><div class="l">Temps ensemble</div></div>
+        <div class="card kpi"><div class="v">${p.worlds.size}</div><div class="l">Mondes partagés</div></div>
+        <div class="card kpi"><div class="v">${ago(p.last)}</div><div class="l">Dernière fois</div></div>
+      </div>
+      ${p.avatarHist.length ? `<h2>🎭 Ses derniers avatars</h2><div class="tags">${[...new Set(p.avatarHist.slice().reverse().map(a => a.avatar))].slice(0, 12).map(a => `<span class="tag">🎭 ${esc(a)}</span>`).join('')}</div>` : ''}`
+      : '<p class="muted">Vous ne vous êtes pas encore croisés dans tes logs.</p>'}`);
+}
+
+// Visionneuse : une image en grand
+function openZoom(url, title = '', back = null) {
+  showModal(`<div class="zoom">
+    ${back ? `<button class="ghost" data-${back.type}="${esc(back.id)}">← Retour</button>` : ''}
+    ${title ? `<h1>${esc(title)}</h1>` : ''}
+    ${vimg(url, 'zoomimg')}
+    <p class="muted">👀 Image d'aperçu fournie par VRChat. Pour respecter les créateurs, VRCLogs permet de regarder les avatars, jamais de les télécharger ou de les copier.</p>
+  </div>`);
+}
+
+// =====================================================================
+//  MES AVATARS
+// =====================================================================
+async function renderAvatars(force = false) {
+  const el = $('view-avatars');
+  if (!VRC.user) {
+    el.innerHTML = `<header class="bar"><h1>Mes avatars</h1></header>
+      <div class="empty">Connecte ton compte VRChat dans l'onglet <a class="link" data-goto="friends">💜 Amis</a> pour voir tes avatars.</div>`;
+    return;
+  }
+  if (!myAvatars || force) {
+    el.innerHTML = '<header class="bar"><h1>Mes avatars</h1></header><div class="empty">Chargement de tes avatars…</div>';
+    const r = await window.api.vrc.avatars();
+    myAvatars = r.avatars || [];
+    if (r.error) toast(`⚠️ ${esc(r.error)}`);
+    if (currentView !== 'avatars') return;
+  }
+  const q = ($('avatarSearch')?.value || '').trim().toLowerCase();
+  const list = myAvatars.filter(a => !q || a.name.toLowerCase().includes(q));
+  el.innerHTML = `
+    <header class="bar"><h1>Mes avatars <span class="muted">(${myAvatars.length})</span></h1>
+      <input id="avatarSearch" type="search" placeholder="Rechercher un avatar…" value="${esc(q)}">
+      <button class="ghost" id="avatarRefresh">🔄</button></header>
+    <div class="agrid">${list.map(a => `
+      <div class="acard" data-avatar="${esc(a.id)}">
+        <div class="aimg">${vimg(a.thumb)}</div>
+        <div class="n">${esc(a.name)}</div>
+        <div class="s"><span class="badge">${a.status === 'public' ? '🌍 Public' : '🔒 Privé'}</span>
+          ${a.platforms.map(p => `<span class="badge">${PLATFORMS[p] || esc(p)}</span>`).join('')}</div>
+        <div class="s muted">Modifié ${a.updated ? ago(Date.parse(a.updated)) : '—'}</div>
+      </div>`).join('') || '<div class="empty">Aucun avatar.</div>'}</div>`;
+  const s = $('avatarSearch');
+  s.oninput = () => { const pos = s.selectionStart; renderAvatars(); const n = $('avatarSearch'); n.focus(); n.setSelectionRange(pos, pos); };
+  $('avatarRefresh').onclick = () => renderAvatars(true);
+}
+function openAvatar(id) {
+  const a = myAvatars?.find(x => x.id === id);
+  if (!a) return;
+  openZoom(a.image || a.thumb, a.name);
+  if (a.description) $('modalBody').insertAdjacentHTML('beforeend', `<div class="card bio">${esc(a.description)}</div>`);
+}
+
+// =====================================================================
 //  PARAMÈTRES (apparence, alertes, données)
 // =====================================================================
 const THEMES = [
@@ -736,7 +995,8 @@ function openSettings(tab = settingsTab) {
     const allTags = [...new Set(Object.values(META).flatMap(m => m.tags || []))];
     body = `
       <p class="muted">Tu reçois une notification Windows quand quelqu'un qui correspond arrive dans ton instance.</p>
-      <label class="opt"><span>⭐ Mes favoris</span><input type="checkbox" data-alert="favs" ${ALERTS.favs ? 'checked' : ''}></label>
+      <label class="opt"><span>⭐ Mes favoris arrivent dans mon instance</span><input type="checkbox" data-alert="favs" ${ALERTS.favs ? 'checked' : ''}></label>
+      <label class="opt"><span>💜 Un ami favori se connecte à VRChat <span class="muted">(compte VRChat connecté)</span></span><input type="checkbox" data-alert="friendOnline" ${ALERTS.friendOnline ? 'checked' : ''}></label>
       <label class="opt"><span>✨ Une personne que je n'ai jamais vue</span><input type="checkbox" data-alert="newPeople" ${ALERTS.newPeople ? 'checked' : ''}></label>
       <label class="opt"><span>🔁 Quelqu'un que j'ai déjà croisé au moins <input type="number" min="0" max="999" class="num" data-alert="minMeets" value="${ALERTS.minMeets}"> fois <span class="muted">(0 = désactivé)</span></span></label>
       <label class="opt"><span>🏷️ Ces tags : <input class="txt" data-alert="tags" value="${esc(ALERTS.tags.join(', '))}" placeholder="ex : ami, club"></span></label>
@@ -748,6 +1008,8 @@ function openSettings(tab = settingsTab) {
       <p>VRChat efface ses vieux logs. VRCLogs garde une <b>copie permanente</b> de tout ton historique.</p>
       <div class="opt"><span>${EVENTS.length.toLocaleString('fr')} événements sauvegardés depuis le ${EVENTS.length ? fmtDate(EVENTS[0].t) : '—'}</span></div>
       <div class="opt"><span>⭐ ${FAVS.size} favori(s) · 📝 ${Object.values(META).filter(m => m.note).length} note(s) · 🏷️ ${Object.values(META).filter(m => m.tags?.length).length} joueur(s) tagués</span></div>
+      <div class="opt"><span>💜 Compte VRChat : ${VRC.user ? `connecté(e) en tant que <b>${esc(VRC.user.name)}</b>` : 'non connecté'}</span>
+        ${VRC.user ? '<button class="ghost" id="vrcLogout">Se déconnecter</button>' : '<button class="ghost" data-goto="friends">Se connecter</button>'}</div>
       <button class="ghost" id="openData">💾 Ouvrir le dossier de sauvegarde</button>
       <button class="ghost" id="openLogs">📁 Ouvrir le dossier des logs VRChat</button>`;
   }
@@ -811,7 +1073,7 @@ function checkAlerts(newEvents) {
 function showModal(html) { $('modalBody').innerHTML = html; $('modal').classList.remove('hidden'); }
 function hideModal() { $('modal').classList.add('hidden'); }
 
-const RENDERERS = { live: renderLive, day: renderDay, feed: renderFeed, worlds: renderWorlds,
+const RENDERERS = { live: renderLive, friends: renderFriends, avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
   people: renderPeople, groups: renderGroups, videos: renderVideos, stats: renderStats };
 function render() { RENDERERS[currentView](); }
 function goTo(view) {
@@ -854,6 +1116,15 @@ document.addEventListener('click', e => {
   if ((el = hit('[data-stab]'))) return openSettings(el.dataset.stab);
   if ((el = hit('[data-day]'))) { DAY = startOfDay(DAY + +el.dataset.day * 86400000 + 3600000 * 2); return renderDay(); }
   if ((el = hit('[data-gotoday]'))) { DAY = +el.dataset.gotoday; return goTo('day'); }
+  if ((el = hit('[data-zoom]'))) {
+    const f = FRIENDS.get(openFriendId);
+    return openZoom(el.dataset.zoom, f ? `Avatar de ${f.name}` : '', f ? { type: 'friend', id: f.id } : null);
+  }
+  if ((el = hit('[data-friend]'))) return openFriend(el.dataset.friend);
+  if ((el = hit('[data-avatar]'))) return openAvatar(el.dataset.avatar);
+  if ((el = hit('[data-ffilter]'))) { friendFilter = el.dataset.ffilter; return renderFriends(); }
+  if ((el = hit('[data-goto]'))) return goTo(el.dataset.goto);
+  if ((el = hit('#vrcLogout'))) { window.api.vrc.logout(); myAvatars = null; hideModal(); return toast('👋 Déconnecté(e) de VRChat'); }
   if ((el = hit('[data-url]'))) return window.api.openUrl(el.dataset.url);
   if ((el = hit('[data-player]'))) return openPlayer(el.dataset.player);
   if ((el = hit('[data-session]'))) return openSession(+el.dataset.session);
@@ -881,8 +1152,18 @@ applySettings();
   EVENTS = init.events;
   LIVE = init.live;
   build();
+  setVRC(await window.api.vrc.get());
   setStatus();
   render();
+
+  // Mises à jour du compte VRChat (amis, connexion…)
+  window.api.vrc.onUpdate(s => {
+    const wasLogged = !!VRC.user;
+    setVRC(s);
+    if (!s.user) myAvatars = null;
+    if (!$('modal').classList.contains('hidden')) return;
+    if (['friends', 'avatars'].includes(currentView) || wasLogged !== !!s.user) render();
+  });
 
   // Nouveaux événements en direct
   window.api.onEvents(evs => {

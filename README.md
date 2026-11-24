@@ -16,6 +16,8 @@ Qui était là, combien de temps, dans quel monde, avec quel avatar — tout, en
 ## ✨ Fonctionnalités
 
 - 🟢 **En direct** — l'instance où tu es, qui est présent, depuis combien de temps, première rencontre ou non
+- 💜 **Amis** *(compte VRChat, optionnel)* — qui est en ligne, dans quel monde, tes groupes de favoris, bouton « Rejoindre »
+- 🧍 **Avatars** — regarde l'avatar actuel de tes amis en grand et la galerie de tes propres avatars
 - 📈 **Graphique d'instance** — le nombre de joueurs au fil du temps ; survole-le pour voir qui était là à chaque minute
 - 📅 **Résumé du jour** — temps de jeu, mondes, nouvelles rencontres, moment fort de la journée
 - 📜 **Journal** — arrivées, départs, avatars, vidéos ; recherche, filtres et export CSV
@@ -40,12 +42,15 @@ Qui était là, combien de temps, dans quel monde, avec quel avatar — tout, en
 
 ## 🔒 Vie privée et sécurité
 
-- VRCLogs **lit uniquement les fichiers de log** que VRChat écrit sur ton PC
-  (`%LocalAppData%Low\VRChat\VRChat\output_log_*.txt`).
-- **Aucune connexion à ton compte VRChat**, aucun mot de passe demandé.
-- **Aucune donnée n'est envoyée sur Internet.** Tout reste sur ton ordinateur
-  (`%AppData%\VRCLogs`).
+- Les logs viennent **uniquement des fichiers** que VRChat écrit sur ton PC
+  (`%LocalAppData%Low\VRChat\VRChat\output_log_*.txt`). Tout reste sur ton ordinateur (`%AppData%\VRCLogs`).
+- La **connexion au compte VRChat est optionnelle** (seulement pour les amis et les avatars) :
+  - ton mot de passe est envoyé **uniquement aux serveurs de VRChat** et n'est **jamais enregistré** ;
+  - seul le jeton de session est gardé, **chiffré par Windows** ;
+  - aucune autre donnée n'est envoyée ailleurs.
+- Les avatars peuvent être **regardés**, jamais téléchargés ni copiés, par respect pour leurs créateurs.
 - VRCLogs **ne modifie pas** le jeu et n'interagit pas avec lui.
+- Comme VRCX, VRCLogs utilise l'API web de VRChat, qui n'est pas officiellement documentée.
 
 ## 🛠️ Lancer depuis le code source
 

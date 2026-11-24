@@ -1,9 +1,17 @@
 // Processus principal : lit les fichiers de log et les surveille en temps réel.
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, protocol } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { LogParser } = require('./parser');
+const crypto = require('crypto');
+const { LogParser, parseInstance } = require('./parser');
+const { VRChat } = require('./vrchat');
+
+// "vrcimg://" = notre propre adresse pour afficher les images VRChat (avatars, mondes).
+// Elles passent par main.js, qui les télécharge proprement et les garde en cache.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'vrcimg', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 
 const LOG_DIR = path.join(os.homedir(), 'AppData', 'LocalLow', 'VRChat', 'VRChat');
 const LIVE_WINDOW = 10 * 60 * 1000; // log modifié il y a moins de 10 min = VRChat ouvert
@@ -127,6 +135,118 @@ function poll() {
   win?.webContents.send('status', { live: isLive() });
 }
 
+// =====================================================================
+//  Compte VRChat (optionnel) : liste d'amis, favoris, avatars
+// =====================================================================
+let vrc = null;
+const IMG_DIR = path.join(DATA_DIR, 'images');
+const social = { user: null, friends: [], favorites: { groups: [], favs: [] }, updated: 0, error: null };
+let lastFull = 0;
+let refreshing = false;
+
+function sendSocial() { win?.webContents.send('vrc', social); }
+
+// Met à jour la liste d'amis. "full" = aussi les amis hors ligne et les favoris (plus lourd).
+async function refreshFriends(full = false) {
+  if (!social.user || refreshing) return;
+  refreshing = true;
+  try {
+    const online = await vrc.friends(false);
+    const map = new Map(social.friends.map(f => [f.id, f]));
+    if (full || !social.friends.length) {
+      map.clear();
+      for (const f of await vrc.friends(true)) map.set(f.id, f);
+      social.favorites = await vrc.favorites();
+      lastFull = Date.now();
+    } else {
+      // ceux qui ne sont plus dans la liste "en ligne" viennent de se déconnecter
+      for (const f of map.values()) if (f.online) { f.online = false; f.location = 'offline'; }
+    }
+    for (const f of online) map.set(f.id, f);
+
+    // Nom et image du monde où se trouve chaque ami (gardés en mémoire)
+    let lookups = 0;
+    for (const f of map.values()) {
+      const m = /^(wrld_[^:]+):/.exec(f.location);
+      f.instType = m ? parseInstance(f.location).type : null;
+      f.world = null;
+      if (!m) continue;
+      if (!vrc.worlds.has(m[1]) && lookups++ >= 15) continue; // max 15 nouveaux mondes par mise à jour
+      try { f.world = await vrc.world(m[1]); } catch {}
+    }
+    social.friends = [...map.values()];
+    social.updated = Date.now();
+    social.error = null;
+  } catch (e) {
+    social.error = e.message;
+    if (e.status === 401) { vrc.clear(); social.user = null; social.friends = []; } // session expirée
+  }
+  refreshing = false;
+  sendSocial();
+}
+
+function handleAuth(r) {
+  if (r.user) { social.user = r.user; sendSocial(); refreshFriends(true); }
+  return r;
+}
+
+ipcMain.handle('vrc:get', () => social);
+ipcMain.handle('vrc:login', async (_e, { username, password }) => {
+  try { return handleAuth(await vrc.login(username, password)); } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('vrc:2fa', async (_e, { method, code }) => {
+  try { return handleAuth(await vrc.verify2fa(method, code)); } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('vrc:logout', async () => {
+  await vrc.logout();
+  Object.assign(social, { user: null, friends: [], favorites: { groups: [], favs: [] }, updated: 0, error: null });
+  sendSocial();
+});
+ipcMain.handle('vrc:refresh', () => refreshFriends(true));
+ipcMain.handle('vrc:avatars', async () => {
+  try { return { avatars: await vrc.myAvatars() }; } catch (e) { return { error: e.message }; }
+});
+
+// Images VRChat : on n'accepte que les serveurs de VRChat, et on garde une copie en cache
+function serveImage(req) {
+  return (async () => {
+    try {
+      const u = new URL(req.url).searchParams.get('u');
+      if (!/(^|\.)vrchat\.(cloud|com)$/.test(new URL(u).hostname)) return new Response('', { status: 403 });
+      const fp = path.join(IMG_DIR, crypto.createHash('sha1').update(u).digest('hex'));
+      if (fs.existsSync(fp)) {
+        const type = fs.existsSync(fp + '.t') ? fs.readFileSync(fp + '.t', 'utf8') : 'image/png';
+        return new Response(fs.readFileSync(fp), { headers: { 'Content-Type': type } });
+      }
+      const res = await vrc.fetchImage(u);
+      if (!res.ok) return new Response('', { status: res.status });
+      const type = res.headers.get('content-type') || 'image/png';
+      const buf = Buffer.from(await res.arrayBuffer());
+      fs.writeFileSync(fp, buf);
+      fs.writeFileSync(fp + '.t', type);
+      return new Response(buf, { headers: { 'Content-Type': type } });
+    } catch {
+      return new Response('', { status: 500 });
+    }
+  })();
+}
+
+function startVRChat() {
+  fs.mkdirSync(IMG_DIR, { recursive: true });
+  // Mode test (développement seulement) : de faux amis pour vérifier l'affichage
+  if (process.env.VRCLOGS_MOCK) vrc = new (require('./dev/mock-vrchat'))(allEvents);
+  else vrc = new VRChat(DATA_DIR);
+  protocol.handle('vrcimg', serveImage);
+  // On reprend la session enregistrée en arrière-plan (la fenêtre n'attend pas)
+  vrc.restore().then(user => {
+    social.user = user;
+    sendSocial();
+    if (user) refreshFriends(true);
+  });
+  // Toutes les 60 s : amis en ligne. Toutes les 10 min : liste complète.
+  setInterval(() => refreshFriends(Date.now() - lastFull > 10 * 60 * 1000), 60 * 1000);
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1300,
@@ -155,9 +275,13 @@ function createWindow() {
         ['player', `goTo('people'); document.querySelector('.trow[data-player]').click()`],
         ['session', `hideModal(); goTo('worlds'); document.querySelectorAll('.wcard')[1].click()`],
         ['settings-alerts', `hideModal(); openSettings('alerts')`],
+        ['friends', `hideModal(); goTo('friends')`],
+        ['friend', `document.querySelector('.fcard[data-friend]').click()`],
+        ['avatar-zoom', `document.querySelector('[data-zoom]').click()`],
+        ['avatars', `hideModal(); goTo('avatars')`],
       ];
       for (const [name, js] of steps) {
-        await win.webContents.executeJavaScript(js);
+        try { await win.webContents.executeJavaScript(js); } catch { continue; } // étape impossible (ex : pas connecté)
         await new Promise(r => setTimeout(r, 1200));
         await win.webContents.capturePage();
         fs.writeFileSync(path.join(process.env.VRCLOGS_SHOT, `${name}.png`), (await win.webContents.capturePage()).toPNG());
@@ -170,7 +294,8 @@ function createWindow() {
 ipcMain.handle('init', () => ({ events: allEvents, logDir: LOG_DIR, live: isLive() }));
 ipcMain.handle('open-data-folder', () => shell.openPath(DATA_DIR));
 ipcMain.handle('open-url', (_e, url) => {
-  if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+  // On n'ouvre que des pages web, ou un lien "rejoindre" de VRChat
+  if (/^https?:\/\//i.test(url) || /^vrchat:\/\/launch\?/i.test(url)) shell.openExternal(url);
 });
 ipcMain.handle('open-log-folder', () => shell.openPath(LOG_DIR));
 ipcMain.handle('export-csv', async (_e, text) => {
@@ -185,6 +310,7 @@ ipcMain.handle('export-csv', async (_e, text) => {
 
 app.whenReady().then(() => {
   initialLoad();
+  startVRChat();
   createWindow();
   setInterval(poll, 1000);
 });

@@ -18,6 +18,8 @@ package.json     → la carte d'identité du projet (nom, commande "npm start")
 main.js          → le CERVEAU CACHÉ : lit les logs, sauvegarde l'historique
 parser.js        → le TRADUCTEUR : transforme une ligne de log en événement
 preload.js       → le PONT sécurisé entre main.js et l'interface
+vrchat.js        → la CONNEXION au compte VRChat (amis, favoris, avatars)
+dev/             → outils de test (faux amis), jamais inclus dans l'installateur
 ui/index.html    → la STRUCTURE de l'interface
 ui/style.css     → l'APPARENCE (les thèmes sont tout en haut)
 ui/app.js        → le CERVEAU VISIBLE : calculs + affichage des pages

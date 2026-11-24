@@ -8,7 +8,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- Sécurité : la page n'a le droit de charger que ses propres fichiers -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: vrcimg:">
   <title>VRCLogs</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -18,6 +18,8 @@
     <div class="brand">VRC<span>Logs</span></div>
     <nav>
       <button class="nav active" data-view="live">🟢 En direct</button>
+      <button class="nav" data-view="friends">💜 Amis <span id="friendCount" class="navcount"></span></button>
+      <button class="nav" data-view="avatars">🧍 Mes avatars</button>
       <button class="nav" data-view="day">📅 Résumé du jour</button>
       <button class="nav" data-view="feed">📜 Journal</button>
       <button class="nav" data-view="worlds">🌍 Mondes</button>
@@ -35,6 +37,8 @@
   <main>
     <!-- Chaque <section> est une page. Une seule est visible à la fois (classe "active"). -->
     <section id="view-live" class="view active"></section>
+    <section id="view-friends" class="view"></section>
+    <section id="view-avatars" class="view"></section>
     <section id="view-day" class="view"></section>
 
     <section id="view-feed" class="view">

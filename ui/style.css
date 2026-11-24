@@ -269,6 +269,75 @@ textarea:focus, #tagInput:focus, .opt .num:focus, .opt .txt:focus { border-color
 .vrow { grid-template-columns: 130px 28px 1fr auto; }
 .vrow .link { word-break: break-all; }
 
+/* ===== AMIS ===== */
+img.broken { display: none; }
+.navcount { float: right; font-size: 11px; background: var(--card2); color: var(--green); border-radius: 10px; padding: 0 7px; }
+.navcount:empty { display: none; }
+.me { display: flex; align-items: center; gap: 12px; margin-right: auto; }
+.me h1 { margin: 0; }
+.meimg { width: 52px; height: 52px; border-radius: 12px; object-fit: cover; border: 2px solid var(--accent); }
+.chip { background: var(--card); border: 1px solid var(--line); padding: 5px 12px; border-radius: 20px; cursor: pointer; }
+.chip.on { border-color: var(--accent); background: var(--card2); }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.fcard {
+  display: flex; gap: 12px; align-items: center; background: var(--card); border: 1px solid transparent;
+  border-radius: 14px; padding: 10px; cursor: pointer; transition: .15s;
+}
+.fcard:hover { border-color: var(--accent); transform: translateY(-1px); }
+.fcard.offline { opacity: .55; }
+.fcard.offline:hover { opacity: 1; }
+.fimg { position: relative; width: 64px; height: 64px; flex: none; }
+.fimg .dot { position: absolute; inset: 0; width: 64px; height: 64px; margin: 0; border-radius: 12px; font-size: 24px; }
+.fimg img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+.sdot { position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--card); }
+.sdot.inline { position: static; display: inline-block; width: 11px; height: 11px; border: 0; margin-right: 4px; vertical-align: middle; }
+.finfo { min-width: 0; }
+.finfo .n { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.finfo .s { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.finfo .where { color: var(--text); }
+
+/* Connexion */
+.login { max-width: 480px; margin: 40px auto; padding: 28px; }
+.login form { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+.login input {
+  background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; outline: none;
+}
+.login input:focus { border-color: var(--accent); }
+.primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #1a0f0d; font-weight: 700;
+  border: 0; border-radius: 10px; padding: 11px; cursor: pointer;
+}
+.primary:disabled { opacity: .6; }
+.privacy { color: var(--muted); font-size: 13px; padding-left: 18px; line-height: 1.8; }
+
+/* Fiche ami */
+.fhead { display: flex; gap: 20px; align-items: flex-start; }
+.fhead h1 { margin: 0 0 6px; }
+.favatar { position: relative; width: 220px; height: 165px; flex: none; border-radius: 14px; overflow: hidden; background: var(--card2); cursor: zoom-in; }
+.favatar img { width: 100%; height: 100%; object-fit: cover; }
+.zoomhint { position: absolute; right: 8px; bottom: 8px; background: #0008; border-radius: 8px; padding: 2px 6px; opacity: 0; transition: .15s; }
+.favatar:hover .zoomhint { opacity: 1; }
+.fbtns { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.btn { display: inline-block; text-decoration: none; cursor: pointer; font-size: 13px; }
+.floc { display: flex; gap: 14px; align-items: center; }
+.wthumb { width: 160px; height: 120px; object-fit: cover; border-radius: 10px; }
+.bio { white-space: pre-wrap; margin-top: 10px; }
+
+/* Visionneuse */
+.zoom { text-align: center; }
+.zoom > .ghost { float: left; }
+.zoomimg { max-width: 100%; max-height: 62vh; border-radius: 14px; margin: 10px 0; box-shadow: 0 10px 40px #0009; }
+
+/* Mes avatars */
+.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.acard { background: var(--card); border: 1px solid transparent; border-radius: 14px; padding: 10px; cursor: pointer; transition: .15s; }
+.acard:hover { border-color: var(--accent); transform: translateY(-2px); }
+.aimg { aspect-ratio: 4 / 3; border-radius: 10px; overflow: hidden; background: var(--card2); margin-bottom: 8px; }
+.aimg img { width: 100%; height: 100%; object-fit: cover; }
+.acard .n { font-weight: 600; }
+.acard .s { margin-top: 4px; font-size: 12px; }
+.acard .badge { margin: 0 4px 0 0; }
+
 /* Notifications dans l'app */
 #toasts { position: fixed; top: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 20; }
 .toast {

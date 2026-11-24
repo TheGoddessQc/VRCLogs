@@ -1,7 +1,7 @@
 {
   "name": "vrclogs",
   "productName": "VRCLogs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Logs avancés pour VRChat : instances en direct, historique des mondes, personnes rencontrées, statistiques.",
   "author": "TheGoddessQc",
   "license": "MIT",
@@ -17,6 +17,7 @@
       "main.js",
       "parser.js",
       "preload.js",
+      "vrchat.js",
       "ui/**/*",
       "build/icon.png"
     ],

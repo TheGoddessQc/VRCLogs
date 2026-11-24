@@ -67,4 +67,4 @@ class LogParser {
   }
 }
 
-module.exports = { LogParser };
+module.exports = { LogParser, parseInstance };
