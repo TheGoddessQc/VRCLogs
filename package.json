@@ -19,6 +19,8 @@
       "preload.js",
       "vrchat.js",
       "avatars.js",
+      "steam.js",
+      "news.js",
       "ui/**/*",
       "build/icon.png"
     ],

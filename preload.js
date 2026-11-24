@@ -9,6 +9,18 @@ contextBridge.exposeInMainWorld('api', {
   openLogFolder: () => ipcRenderer.invoke('open-log-folder'),
   openDataFolder: () => ipcRenderer.invoke('open-data-folder'),
   exportCsv: text => ipcRenderer.invoke('export-csv', text),
+  // Steam (heures de jeu, amis) et actualités
+  steam: {
+    local: () => ipcRenderer.invoke('steam:local'),
+    hasKey: () => ipcRenderer.invoke('steam:hasKey'),
+    setKey: (key, steamId) => ipcRenderer.invoke('steam:setKey', { key, steamId }),
+    clearKey: () => ipcRenderer.invoke('steam:clearKey'),
+    time: steamId => ipcRenderer.invoke('steam:time', steamId),
+    friends: (steamId, force) => ipcRenderer.invoke('steam:friends', { steamId, force }),
+    onProgress: cb => ipcRenderer.on('steam:progress', (_e, p) => cb(p)),
+  },
+  news: force => ipcRenderer.invoke('news:get', force),
+  store: storeId => ipcRenderer.invoke('vrc:store', storeId),
   // Avatars publics (base avtrDB)
   avatarLookup: (name, author) => ipcRenderer.invoke('avatar:lookup', { name, author }),
   // Compte VRChat

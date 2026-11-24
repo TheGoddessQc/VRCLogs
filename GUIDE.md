@@ -18,7 +18,12 @@ package.json     → la carte d'identité du projet (nom, commande "npm start")
 main.js          → le CERVEAU CACHÉ : lit les logs, sauvegarde l'historique
 parser.js        → le TRADUCTEUR : transforme une ligne de log en événement
 preload.js       → le PONT sécurisé entre main.js et l'interface
-vrchat.js        → la CONNEXION au compte VRChat (amis, favoris, avatars)
+vrchat.js        → la CONNEXION au compte VRChat (amis, favoris, avatars, profils, boutiques)
+avatars.js       → savoir si un avatar est public (base avtrDB)
+steam.js         → heures de jeu (fichiers Steam) et amis Steam (clé API)
+news.js          → actualités de VRChat (via Steam)
+ui/brain.js      → le cerveau d'amis (simulation physique)
+ui/extras.js     → pages Steam et Nouveautés
 dev/             → outils de test (faux amis), jamais inclus dans l'installateur
 ui/index.html    → la STRUCTURE de l'interface
 ui/style.css     → l'APPARENCE (les thèmes sont tout en haut)

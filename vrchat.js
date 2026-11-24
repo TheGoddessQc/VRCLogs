@@ -216,6 +216,20 @@ class VRChat {
       worldCount: p.totalPublicWorldsCount || 0,
     };
   }
+  // Boutique d'un monde ou d'un groupe (LECTURE SEULE : aucun achat possible depuis VRCLogs)
+  async store(storeId) {
+    const s = await this.request('GET', `/economy/store?storeId=${encodeURIComponent(storeId)}&hydrateListings=true`);
+    return {
+      id: s.id || storeId, name: s.displayName, type: s.storeType, seller: s.sellerDisplayName,
+      worldId: s.worldId || null, groupId: s.groupId || null, description: s.description || '',
+      listings: (s.listings || []).filter(l => l.active !== false && !l.archived).map(l => ({
+        id: l.id, name: l.displayName, description: l.description || '', price: l.priceTokens,
+        vrcPlusPrice: l.vrcPlusDiscountPrice || null, listingType: l.listingType,
+        duration: l.duration, durationType: l.durationType, types: l.productTypes || [],
+        image: l.imageUrl || '', created: l.created, updated: l.updated, soldByVrc: !!l.soldByVrc,
+      })),
+    };
+  }
   async world(id) {
     if (this.worlds.has(id)) return this.worlds.get(id);
     const w = await this.request('GET', `/worlds/${encodeURIComponent(id)}`);

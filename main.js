@@ -7,6 +7,8 @@ const crypto = require('crypto');
 const { LogParser, parseInstance } = require('./parser');
 const { VRChat } = require('./vrchat');
 const { AvatarSearch, UA } = require('./avatars');
+const { Steam } = require('./steam');
+const { getNews } = require('./news');
 
 // "vrcimg://" = notre propre adresse pour afficher les images VRChat (avatars, mondes).
 // Elles passent par main.js, qui les télécharge proprement et les garde en cache.
@@ -75,8 +77,11 @@ const HIST = path.join(DATA_DIR, 'history.jsonl');
 const STATE = path.join(DATA_DIR, 'state.json');
 let doneFiles = new Set(); // fichiers de log terminés et déjà sauvegardés
 
+// À augmenter quand parser.js apprend à reconnaître de nouvelles lignes :
+// les logs encore présents sur le PC seront relus une fois.
+const PARSER_VERSION = 2;
 function saveState() {
-  fs.writeFileSync(STATE, JSON.stringify({ done: [...doneFiles] }));
+  fs.writeFileSync(STATE, JSON.stringify({ done: [...doneFiles], v: PARSER_VERSION }));
 }
 function appendHistory(events) {
   if (events.length) fs.appendFileSync(HIST, events.map(e => JSON.stringify(e)).join('\n') + '\n');
@@ -84,7 +89,11 @@ function appendHistory(events) {
 
 function initialLoad() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  try { doneFiles = new Set(JSON.parse(fs.readFileSync(STATE, 'utf8')).done); } catch {}
+  try {
+    const st = JSON.parse(fs.readFileSync(STATE, 'utf8'));
+    // Nouvelle version du lecteur → on relit tout ce qui existe encore
+    if (st.v === PARSER_VERSION) doneFiles = new Set(st.done);
+  } catch {}
   let hist = [];
   try {
     hist = fs.readFileSync(HIST, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
@@ -207,6 +216,19 @@ ipcMain.handle('vrc:refresh', () => refreshFriends(true));
 ipcMain.handle('vrc:user', async (_e, id) => {
   try { return await vrc.profile(id); } catch (e) { return { error: e.message }; }
 });
+// ---------- Steam, actualités, boutiques ----------
+let steam = null;
+const safe = fn => async (...a) => { try { return await fn(...a); } catch (e) { return { error: e.message, status: e.status } } };
+ipcMain.handle('steam:local', () => steam.local());
+ipcMain.handle('steam:hasKey', () => steam.hasKey());
+ipcMain.handle('steam:setKey', safe(async (_e, { key, steamId }) => { await steam.setKey(key, steamId); return { ok: true }; }));
+ipcMain.handle('steam:clearKey', () => steam.clearKey());
+ipcMain.handle('steam:time', safe((_e, steamId) => steam.vrchatTime(steamId)));
+ipcMain.handle('steam:friends', safe((_e, { steamId, force }) =>
+  steam.friends(steamId, force, (done, total) => win?.webContents.send('steam:progress', { done, total }))));
+ipcMain.handle('news:get', safe((_e, force) => getNews(force)));
+ipcMain.handle('vrc:store', safe((_e, storeId) => vrc.store(storeId)));
+
 let avatarSearch = null;
 ipcMain.handle('avatar:lookup', (_e, { name, author }) => avatarSearch.lookup(name, author));
 ipcMain.handle('vrc:avatars', async () => {
@@ -220,7 +242,8 @@ function serveImage(req) {
       const u = new URL(req.url).searchParams.get('u');
       const host = new URL(u).hostname;
       const isVRChat = /(^|\.)vrchat\.(cloud|com)$/.test(host);
-      if (!isVRChat && host !== 'thumb.avtrdb.com') return new Response('', { status: 403 });
+      const isOther = host === 'thumb.avtrdb.com' || /(^|\.)steamstatic\.com$/.test(host) || /(^|\.)akamaihd\.net$/.test(host);
+      if (!isVRChat && !isOther) return new Response('', { status: 403 });
       const fp = path.join(IMG_DIR, crypto.createHash('sha1').update(u).digest('hex'));
       if (fs.existsSync(fp)) {
         const type = fs.existsSync(fp + '.t') ? fs.readFileSync(fp + '.t', 'utf8') : 'image/png';
@@ -243,6 +266,7 @@ function serveImage(req) {
 function startVRChat() {
   fs.mkdirSync(IMG_DIR, { recursive: true });
   avatarSearch = new AvatarSearch(DATA_DIR);
+  steam = new Steam(DATA_DIR);
   // Mode test (développement seulement) : de faux amis pour vérifier l'affichage
   if (process.env.VRCLOGS_MOCK) vrc = new (require('./dev/mock-vrchat'))(allEvents);
   else vrc = new VRChat(DATA_DIR);
@@ -302,6 +326,9 @@ function createWindow() {
         ['avatar-history', `hideModal(); openPlayer([...M.players.values()].sort((a, b) => b.avatarHist.length - a.avatarHist.length)[0].key); setTimeout(() => document.querySelector('.avrow')?.scrollIntoView(), 50)`],
         ['avatar-history-done', `new Promise(r => setTimeout(r, 9000))`],
         ['avatar-public', `document.querySelector('.avrow.public')?.click()`],
+        ['steam', `hideModal(); goTo('steam'); new Promise(r => setTimeout(r, 3000))`],
+        ['news', `goTo('news'); new Promise(r => setTimeout(r, 4000))`],
+        ['stores', `NEWS.tab = 'stores'; renderNews(); new Promise(r => setTimeout(r, 4000))`],
         ['brain', `hideModal(); goTo('brain'); new Promise(r => setTimeout(r, 6000))`],
         ['brain-hover', `(() => { const n = BRAIN.nodes[3]; BRAIN.hover = n; drawBrain(); })()`],
         ['chart-pin', `goTo('live'); const b = document.querySelector('.ichart'); if (b) pinChart(b, +b.dataset.t0 + (b.dataset.t1 - b.dataset.t0) * 0.3)`],

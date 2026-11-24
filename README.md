@@ -18,6 +18,9 @@ Qui était là, combien de temps, dans quel monde, avec quel avatar — tout, en
 - 🟢 **En direct** — l'instance où tu es, qui est présent, depuis combien de temps, première rencontre ou non
 - 💜 **Amis** *(compte VRChat, optionnel)* — qui est en ligne, dans quel monde, tes groupes de favoris, bouton « Rejoindre »
 - 🧍 **Avatars** — regarde l'avatar actuel de tes amis en grand et la galerie de tes propres avatars
+- 🧠 **Cerveau d'amis** — une carte interactive de tes relations
+- 🎮 **Steam** — tes heures exactes sur VRChat et tes amis Steam qui y jouent
+- 📰 **Nouveautés** — les mises à jour officielles de VRChat et les boutiques des mondes visités (affichage seulement)
 - 📈 **Graphique d'instance** — le nombre de joueurs au fil du temps ; survole-le pour voir qui était là à chaque minute
 - 📅 **Résumé du jour** — temps de jeu, mondes, nouvelles rencontres, moment fort de la journée
 - 📜 **Journal** — arrivées, départs, avatars, vidéos ; recherche, filtres et export CSV
@@ -51,6 +54,9 @@ Qui était là, combien de temps, dans quel monde, avec quel avatar — tout, en
 - Les avatars peuvent être **regardés**, jamais téléchargés ni copiés, par respect pour leurs créateurs.
 - Pour savoir si un avatar vu dans tes logs est public, VRCLogs envoie **uniquement son nom** à la base publique
   [avtrDB](https://avtrdb.com). Désactivable dans *Paramètres → Données*.
+- **Steam** : les heures de jeu sont lues dans les fichiers de Steam sur ton PC. Pour les amis Steam, tu peux ajouter
+  ta propre clé API Steam (optionnelle) : elle est **chiffrée par Windows** et envoyée **uniquement à Steam**.
+- Les boutiques sont en **affichage seulement** : aucun achat n'est possible depuis VRCLogs.
 - VRCLogs **ne modifie pas** le jeu et n'interagit pas avec lui.
 - Comme VRCX, VRCLogs utilise l'API web de VRChat, qui n'est pas officiellement documentée.
 

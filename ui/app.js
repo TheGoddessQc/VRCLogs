@@ -162,6 +162,9 @@ function build() {
       case 'avatarinfo': // qui a créé cet avatar (pour mieux le retrouver dans la base publique)
         avAuthor.set(e.avatar, e.author);
         break;
+      case 'worldstore': // ce monde a une boutique
+        if (cur) cur.storeId = e.storeId;
+        break;
       case 'video':
         if (cur) cur.videos.push(e);
         break;
@@ -170,7 +173,7 @@ function build() {
         close(e.t);
         break;
     }
-    if (cur && e.type !== 'self' && e.type !== 'avatarinfo') cur.events.push(e);
+    if (cur && !['self', 'avatarinfo', 'worldstore'].includes(e.type)) cur.events.push(e);
   }
 
   let current = null;
@@ -1324,7 +1327,8 @@ function checkAlerts(newEvents) {
 function showModal(html) { $('modalBody').innerHTML = html; $('modal').classList.remove('hidden'); initCharts(); }
 function hideModal() { $('modal').classList.add('hidden'); }
 
-const RENDERERS = { live: renderLive, friends: renderFriends, brain: () => renderBrain(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
+const RENDERERS = { live: renderLive, friends: renderFriends, brain: () => renderBrain(),
+  steam: () => renderSteam(), news: () => renderNews(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
   people: renderPeople, groups: renderGroups, videos: renderVideos, stats: renderStats };
 function render() { RENDERERS[currentView](); initCharts(); }
 function goTo(view) {
@@ -1435,7 +1439,7 @@ applySettings();
     if (!$('modal').classList.contains('hidden')) return;
     // Les pages Amis et Avatars ne dépendent pas des logs : on ne les redessine pas
     // (sinon ce que tu es en train de taper serait effacé à chaque seconde)
-    if (['friends', 'avatars', 'brain'].includes(currentView)) return;
+    if (['friends', 'avatars', 'brain', 'steam', 'news'].includes(currentView)) return;
     // Pendant que tu explores le graphique (souris dessus ou curseur en main), on attend
     if (document.querySelector('.ichart:hover') || document.activeElement?.closest?.('.ichart')) return;
     if (currentView !== 'feed' || document.querySelector('main').scrollTop < 50) render();
