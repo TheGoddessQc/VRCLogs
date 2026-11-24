@@ -216,6 +216,30 @@ body.compact main { padding: 16px 20px; }
 .theme:hover { transform: translateY(-2px); }
 .theme.on { border-color: var(--accent); }
 .theme .sw { height: 46px; border-radius: 10px; margin-bottom: 8px; }
+.theme { font-size: 13px; font-weight: 600; }
+.theme .dots { display: flex; justify-content: center; gap: 3px; margin-bottom: 6px; }
+.theme .dots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff3; }
+
+/* Ma palette */
+.palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.pcolor {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px; cursor: pointer; font-size: 12px; text-align: center;
+}
+.pcolor:hover { border-color: var(--accent); }
+.pcolor input[type=color] { width: 54px; height: 54px; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
+.pcolor input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.pcolor input[type=color]::-webkit-color-swatch { border: 3px solid var(--line); border-radius: 50%; }
+.pcolor code { color: var(--muted); font-size: 11px; }
+
+/* Options en couleur */
+.opt { border-left: 3px solid var(--accent); transition: background .15s; }
+.opt:nth-of-type(even) { border-left-color: var(--accent2); }
+.opt:hover { background: var(--card2); }
+
+/* Boutique */
+.shopinfo { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; background: linear-gradient(90deg, var(--hero), var(--card)); }
+.shopicon { font-size: 34px; }
 .opt {
   display: flex; justify-content: space-between; align-items: center;
   background: var(--card); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;

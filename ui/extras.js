@@ -161,21 +161,34 @@ window.api.steam.onProgress(p => {
 });
 
 // ---------------------------------------------------------------------
-//  📰 NOUVEAUTÉS : mises à jour VRChat + boutiques des mondes
+//  📰 NOUVEAUTÉS : mises à jour officielles de VRChat
 // ---------------------------------------------------------------------
-const NEWS = { tab: 'news', items: null, error: '', officialOnly: true, stores: new Map() };
+const NEWS = { items: null, error: '', officialOnly: true, stores: new Map() };
 
 async function renderNews() {
-  const el = $('view-news');
-  el.innerHTML = `
-    <header class="bar"><h1>📰 Nouveautés</h1></header>
-    <div class="tabs">
-      <button class="tabbtn ${NEWS.tab === 'news' ? 'on' : ''}" data-ntab="news">📢 Mises à jour VRChat</button>
-      <button class="tabbtn ${NEWS.tab === 'stores' ? 'on' : ''}" data-ntab="stores">🛍️ Boutiques des mondes</button>
-    </div>
+  $('view-news').innerHTML = `
+    <header class="bar"><h1>📰 Nouveautés VRChat</h1>
+      <button class="ghost" id="newsRefresh" title="Actualiser">🔄</button></header>
     <div id="newsBody"></div>`;
-  if (NEWS.tab === 'news') await drawNews();
-  else drawStores();
+  $('newsRefresh').onclick = () => { NEWS.items = null; NEWS.error = ''; window.api.news(true).then(() => renderNews()); };
+  await drawNews();
+}
+
+// ---------------------------------------------------------------------
+//  🛍️ BOUTIQUE : les boutiques des mondes (affichage seulement)
+// ---------------------------------------------------------------------
+function renderShop() {
+  $('view-shop').innerHTML = `
+    <header class="bar"><h1>🛍️ Boutique</h1></header>
+    <div class="card shopinfo">
+      <div class="shopicon">🏪</div>
+      <div><b>Boutique officielle de VRChat</b>
+        <div class="muted small">Pas encore disponible : VRChat ne donne pas l'adresse de sa boutique officielle à son API.
+        Elle reste visible dans le jeu (menu Boutique).</div></div>
+    </div>
+    <h2>🌍 Boutiques des mondes que tu as visités</h2>
+    <div id="shopBody"></div>`;
+  drawStores();
 }
 
 async function drawNews() {
@@ -184,7 +197,7 @@ async function drawNews() {
     box.innerHTML = '<div class="empty">Chargement des actualités…</div>';
     const r = await window.api.news(false);
     if (r.error) NEWS.error = r.error; else NEWS.items = r;
-    if (currentView !== 'news' || NEWS.tab !== 'news') return;
+    if (currentView !== 'news') return;
   }
   if (NEWS.error) { $('newsBody').innerHTML = `<div class="empty">⚠️ ${esc(NEWS.error)}</div>`; return; }
   const list = NEWS.items.filter(n => !NEWS.officialOnly || n.official);
@@ -205,7 +218,7 @@ async function drawNews() {
 }
 
 function drawStores() {
-  const box = $('newsBody');
+  const box = $('shopBody');
   // Les boutiques des mondes que tu as visités (trouvées dans tes logs)
   const seen = new Map();
   for (const s of M.sessions) {
@@ -216,8 +229,7 @@ function drawStores() {
   }
   const stores = [...seen.values()].sort((a, b) => b.last - a.last);
   box.innerHTML = `
-    <div class="card note">🛍️ Les boutiques des mondes que tu as visités. <b>Affichage seulement</b> : VRCLogs ne permet aucun achat, tout se passe dans VRChat.
-      <span class="muted">La boutique officielle de VRChat n'est pas accessible par son API, elle reste visible dans le jeu.</span></div>
+    <div class="card note">👀 <b>Affichage seulement</b> : VRCLogs ne permet aucun achat, tout se passe dans VRChat.</div>
     ${!VRC.user ? '<div class="empty">Connecte ton compte VRChat (onglet 💜 Amis) pour voir le contenu des boutiques.</div>' : ''}
     ${stores.map(st => `
       <div class="card storecard" id="store-${esc(st.id)}">
@@ -253,7 +265,3 @@ async function loadStore(id) {
   }).join('') || '<span class="muted">Boutique vide pour l\'instant.</span>';
 }
 
-document.addEventListener('click', e => {
-  const t = e.target.closest('[data-ntab]');
-  if (t) { NEWS.tab = t.dataset.ntab; renderNews(); }
-});

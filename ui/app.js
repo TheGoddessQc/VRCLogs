@@ -1222,30 +1222,92 @@ function openAvatar(id) {
 // =====================================================================
 //  PARAMÈTRES (apparence, alertes, données)
 // =====================================================================
+// ---------------------------------------------------------------------
+//  THÈMES : chaque thème = 5 couleurs de base.
+//  Les autres nuances (bordures, texte gris, dégradés…) sont CALCULÉES
+//  à partir de ces 5 couleurs par themeVars().
+// ---------------------------------------------------------------------
 const THEMES = [
-  { id: 'goddess', name: 'Goddess', a: '#ffc857', b: '#e8323f', bg: '#1d1513' },
-  { id: 'violet', name: 'Violet', a: '#b388ff', b: '#ff7ac6', bg: '#1c1829' },
-  { id: 'ocean', name: 'Océan', a: '#4fd1ff', b: '#6c7bff', bg: '#131b27' },
-  { id: 'menthe', name: 'Menthe', a: '#5ef0b6', b: '#2fc4c4', bg: '#14201c' },
+  { id: 'goddess', name: 'Goddess', bg: '#110b0a', card: '#1d1513', text: '#f7ede6', a: '#ffc857', b: '#e8323f' },
+  { id: 'violet', name: 'Violet', bg: '#0f0d17', card: '#1c1829', text: '#ece8f6', a: '#b388ff', b: '#ff7ac6' },
+  { id: 'ocean', name: 'Océan', bg: '#0a0f17', card: '#131b27', text: '#e6eef8', a: '#4fd1ff', b: '#6c7bff' },
+  { id: 'menthe', name: 'Menthe', bg: '#0b1210', card: '#14201c', text: '#e8f6f0', a: '#5ef0b6', b: '#2fc4c4' },
+  { id: 'bonbon', name: 'Bonbon', bg: '#170b12', card: '#25121e', text: '#fbe9f3', a: '#ff8fd1', b: '#ffb86b' },
+  { id: 'neon', name: 'Néon', bg: '#07060d', card: '#120f1f', text: '#eef0ff', a: '#00e5ff', b: '#ff2fd0' },
+  { id: 'sunset', name: 'Coucher de soleil', bg: '#140c0a', card: '#23140f', text: '#fdeee4', a: '#ffb347', b: '#ff5e62' },
+  { id: 'lavande', name: 'Lavande', bg: '#12101a', card: '#1d1a29', text: '#efeaff', a: '#c8a8ff', b: '#8fd3ff' },
+  { id: 'foret', name: 'Forêt', bg: '#0c110b', card: '#162014', text: '#eaf3e4', a: '#a3d977', b: '#e0c068' },
+  { id: 'glace', name: 'Glace', bg: '#0d1216', card: '#17202a', text: '#eef6fb', a: '#bfe9ff', b: '#7aa7ff' },
+  { id: 'vampire', name: 'Vampire', bg: '#0d0608', card: '#1a0d10', text: '#f3e6e8', a: '#ff3355', b: '#b0003a' },
+  { id: 'clair', name: 'Clair', bg: '#f4f1f7', card: '#ffffff', text: '#1d1a24', a: '#8a4dff', b: '#ff4f8b' },
 ];
+const PALETTE_FIELDS = [
+  ['bg', '🖼️ Fond'], ['card', '🗂️ Cartes'], ['text', '🔤 Texte'], ['a', '⭐ Couleur principale'], ['b', '💖 Couleur secondaire'],
+];
+
+// Petits outils de couleur : mélanger deux couleurs "#rrggbb"
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function rgbToHex(r, g, b) { return '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join(''); }
+// Couleur "teinte / saturation / luminosité" → "#rrggbb"
+function hslHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = n => 255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)));
+  return rgbToHex(f(0), f(8), f(4));
+}
+function mix(c1, c2, t) { const a = hexToRgb(c1), b = hexToRgb(c2); return rgbToHex(...a.map((v, i) => v + (b[i] - v) * t)); }
+
+function currentPalette() {
+  if (SETTINGS.theme === 'custom' && SETTINGS.custom) return SETTINGS.custom;
+  return THEMES.find(t => t.id === SETTINGS.theme) || THEMES[0];
+}
+function themeVars(p) {
+  return {
+    '--bg': p.bg, '--card': p.card, '--text': p.text, '--accent': p.a, '--accent2': p.b,
+    '--card2': mix(p.card, p.text, 0.06),   // carte un peu plus claire (survol, zones)
+    '--line': mix(p.card, p.text, 0.14),    // bordures
+    '--muted': mix(p.text, p.bg, 0.42),     // texte secondaire
+    '--hero': mix(p.bg, p.b, 0.38),         // fond du bandeau "Tu es dans"
+    '--worldrow': mix(p.card, p.b, 0.22),   // lignes "Arrivée dans un monde"
+  };
+}
 let settingsTab = 'look';
 function applySettings() {
+  const vars = themeVars(currentPalette());
+  for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
   document.documentElement.dataset.theme = SETTINGS.theme;
   document.body.classList.toggle('compact', SETTINGS.compact);
   document.body.classList.toggle('no-anim', !SETTINGS.anim);
   save('settings', SETTINGS);
+  if (currentView === 'brain' && typeof drawBrain === 'function') drawBrain(); // le cerveau lit les couleurs
 }
 function openSettings(tab = settingsTab) {
   settingsTab = tab;
   const tabs = [['look', '🎨 Apparence'], ['alerts', '🔔 Alertes'], ['data', '💾 Données']];
   let body = '';
   if (tab === 'look') {
+    const p = currentPalette();
     body = `
-      <h2>Thème</h2>
+      <h2>Thèmes</h2>
       <div class="themes">${THEMES.map(t => `
-        <div class="theme ${SETTINGS.theme === t.id ? 'on' : ''}" data-theme-pick="${t.id}" style="background:${t.bg}">
-          <div class="sw" style="background:linear-gradient(135deg, ${t.a}, ${t.b})"></div>${t.name}
-        </div>`).join('')}</div>
+        <div class="theme ${SETTINGS.theme === t.id ? 'on' : ''}" data-theme-pick="${t.id}" style="background:${t.bg};color:${t.text}">
+          <div class="sw" style="background:linear-gradient(135deg, ${t.a}, ${t.b})"></div>
+          <div class="dots">${[t.bg, t.card, t.text, t.a, t.b].map(c => `<i style="background:${c}"></i>`).join('')}</div>${t.name}
+        </div>`).join('')}
+        ${SETTINGS.custom ? `<div class="theme ${SETTINGS.theme === 'custom' ? 'on' : ''}" data-theme-pick="custom" style="background:${SETTINGS.custom.bg};color:${SETTINGS.custom.text}">
+          <div class="sw" style="background:linear-gradient(135deg, ${SETTINGS.custom.a}, ${SETTINGS.custom.b})"></div>
+          <div class="dots">${PALETTE_FIELDS.map(([k]) => `<i style="background:${SETTINGS.custom[k]}"></i>`).join('')}</div>🎨 Ma palette</div>` : ''}
+      </div>
+      <h2>🎨 Ma palette personnalisée</h2>
+      <p class="muted small">Choisis tes 5 couleurs : tout le reste s'adapte automatiquement. Ça part du thème actuel.</p>
+      <div class="palette">${PALETTE_FIELDS.map(([k, label]) => `
+        <label class="pcolor"><input type="color" data-pal="${k}" value="${p[k]}"><span>${label}</span><code>${p[k]}</code></label>`).join('')}
+      </div>
+      <div class="fbtns">
+        <button class="ghost" id="palCopy" title="Copier le code de ta palette pour la partager">📋 Copier le code</button>
+        <button class="ghost" id="palPaste" title="Coller le code d'une palette partagée">📥 Coller un code</button>
+        <button class="ghost" id="palRandom">🎲 Au hasard</button>
+      </div>
       <h2>Options</h2>
       <label class="opt"><span>📏 Mode compact <span class="muted">— lignes plus petites</span></span><input type="checkbox" data-set="compact" ${SETTINGS.compact ? 'checked' : ''}></label>
       <label class="opt"><span>✨ Animations</span><input type="checkbox" data-set="anim" ${SETTINGS.anim ? 'checked' : ''}></label>`;
@@ -1275,12 +1337,45 @@ function openSettings(tab = settingsTab) {
   showModal(`<h1>⚙️ Paramètres</h1>
     <div class="tabs">${tabs.map(([id, n]) => `<button class="tabbtn ${id === tab ? 'on' : ''}" data-stab="${id}">${n}</button>`).join('')}</div>
     ${body}`);
+  if ($('palCopy')) {
+    // Code de partage : "VRCLogs:#fond-#cartes-#texte-#principale-#secondaire"
+    $('palCopy').onclick = async () => {
+      const p = currentPalette();
+      await navigator.clipboard.writeText('VRCLogs:' + PALETTE_FIELDS.map(([k]) => p[k]).join('-'));
+      toast('📋 Code de palette copié : partage-le à tes amis !');
+    };
+    $('palPaste').onclick = async () => {
+      const m = (await navigator.clipboard.readText()).match(/VRCLogs:(#[0-9a-f]{6})-(#[0-9a-f]{6})-(#[0-9a-f]{6})-(#[0-9a-f]{6})-(#[0-9a-f]{6})/i);
+      if (!m) return toast('⚠️ Aucun code de palette dans le presse-papiers');
+      SETTINGS.custom = Object.fromEntries(PALETTE_FIELDS.map(([k], i) => [k, m[i + 1].toLowerCase()]));
+      SETTINGS.theme = 'custom';
+      applySettings();
+      openSettings('look');
+    };
+    $('palRandom').onclick = () => {
+      // Une palette au hasard, mais harmonieuse : on part d'une teinte et on choisit des voisines
+      const h = Math.floor(Math.random() * 360), h2 = (h + 40 + Math.floor(Math.random() * 100)) % 360;
+      SETTINGS.custom = { bg: hslHex(h, 25, 6), card: hslHex(h, 22, 11), text: hslHex(h, 30, 93), a: hslHex(h, 90, 66), b: hslHex(h2, 85, 60) };
+      SETTINGS.theme = 'custom';
+      applySettings();
+      openSettings('look');
+    };
+  }
   if ($('testAlert')) $('testAlert').onclick = () => notify('🔔 Test', 'Les alertes fonctionnent !');
   if ($('openData')) $('openData').onclick = () => window.api.openDataFolder();
   if ($('openLogs')) $('openLogs').onclick = () => window.api.openLogFolder();
 }
 // Quand on modifie une option dans les paramètres
 document.addEventListener('input', e => {
+  // Un sélecteur de couleur de "Ma palette" a changé : on passe en thème personnalisé
+  if (e.target.dataset.pal) {
+    SETTINGS.custom = { ...Object.fromEntries(PALETTE_FIELDS.map(([k]) => [k, currentPalette()[k]])), [e.target.dataset.pal]: e.target.value };
+    SETTINGS.theme = 'custom';
+    e.target.parentElement.querySelector('code').textContent = e.target.value;
+    document.querySelectorAll('.theme').forEach(t => t.classList.toggle('on', t.dataset.themePick === 'custom'));
+    applySettings();
+    return;
+  }
   const s = e.target.dataset.set, a = e.target.dataset.alert;
   if (s) { SETTINGS[s] = e.target.checked; applySettings(); }
   if (a) {
@@ -1333,7 +1428,7 @@ function showModal(html) { $('modalBody').innerHTML = html; $('modal').classList
 function hideModal() { $('modal').classList.add('hidden'); }
 
 const RENDERERS = { live: renderLive, friends: renderFriends, brain: () => renderBrain(),
-  steam: () => renderSteam(), news: () => renderNews(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
+  steam: () => renderSteam(), news: () => renderNews(), shop: () => renderShop(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
   people: renderPeople, groups: renderGroups, videos: renderVideos, stats: renderStats };
 function render() { RENDERERS[currentView](); initCharts(); }
 function goTo(view) {
@@ -1444,7 +1539,7 @@ applySettings();
     if (!$('modal').classList.contains('hidden')) return;
     // Les pages Amis et Avatars ne dépendent pas des logs : on ne les redessine pas
     // (sinon ce que tu es en train de taper serait effacé à chaque seconde)
-    if (['friends', 'avatars', 'brain', 'steam', 'news'].includes(currentView)) return;
+    if (['friends', 'avatars', 'brain', 'steam', 'news', 'shop'].includes(currentView)) return;
     // Pendant que tu explores le graphique (souris dessus ou curseur en main), on attend
     if (document.querySelector('.ichart:hover') || document.activeElement?.closest?.('.ichart')) return;
     if (currentView !== 'feed' || document.querySelector('main').scrollTop < 50) render();
