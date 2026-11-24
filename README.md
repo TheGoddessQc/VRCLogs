@@ -49,6 +49,8 @@ Qui était là, combien de temps, dans quel monde, avec quel avatar — tout, en
   - seul le jeton de session est gardé, **chiffré par Windows** ;
   - aucune autre donnée n'est envoyée ailleurs.
 - Les avatars peuvent être **regardés**, jamais téléchargés ni copiés, par respect pour leurs créateurs.
+- Pour savoir si un avatar vu dans tes logs est public, VRCLogs envoie **uniquement son nom** à la base publique
+  [avtrDB](https://avtrdb.com). Désactivable dans *Paramètres → Données*.
 - VRCLogs **ne modifie pas** le jeu et n'interagit pas avec lui.
 - Comme VRCX, VRCLogs utilise l'API web de VRChat, qui n'est pas officiellement documentée.
 
