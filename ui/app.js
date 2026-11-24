@@ -327,10 +327,100 @@ function instanceChart(s) {
       <path d="${area}" fill="url(#ig${s.id})"/>
       <path d="${d}" fill="none" style="stroke:var(--accent)" stroke-width="2"/>
       <line class="cursor" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
+      <line class="pin" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
     </svg>
-    <div class="ichart-info muted">🖱️ Survole le graphique pour voir qui était là à chaque moment</div>
+    <div class="ichart-controls">
+      <button class="ghost" data-chartstep="-1" title="Arrivée/départ précédent">⏮</button>
+      <input type="range" class="chart-slider" min="${t0}" max="${t1}" step="1000" value="${t1}">
+      <button class="ghost" data-chartstep="1" title="Arrivée/départ suivant">⏭</button>
+      <input type="time" class="chart-time" step="1" title="Aller à une heure précise">
+      <button class="ghost chart-unpin" title="Désépingler">📌✕</button>
+    </div>
+    <div class="ichart-info muted">🖱️ Survole pour explorer · <b>clique</b> pour épingler un moment · ou utilise le curseur, ⏮ ⏭ et l'heure</div>
   </div>`;
 }
+
+// ---------------------------------------------------------------------
+//  Choisir un moment dans le graphique
+//  CHART_PIN garde le moment épinglé, même quand la page se redessine.
+// ---------------------------------------------------------------------
+let CHART_PIN = null; // { sid, t }
+function chartGeom(box) {
+  return { W: +box.dataset.w, L: +box.dataset.l, R: +box.dataset.r, t0: +box.dataset.t0, t1: +box.dataset.t1 };
+}
+// Montre le moment t : ligne verticale + liste de qui était là
+function showChartTime(box, t, pinned) {
+  const g = chartGeom(box);
+  t = Math.min(g.t1, Math.max(g.t0, t));
+  const x = g.L + (t - g.t0) / (g.t1 - g.t0) * (g.W - g.L - g.R);
+  const line = box.querySelector(pinned ? '.pin' : '.cursor');
+  line.setAttribute('x1', x); line.setAttribute('x2', x); line.setAttribute('visibility', 'visible');
+  const s = M.sessions[+box.dataset.sid];
+  const who = presentAt(s, t);
+  // Qui vient d'arriver / de partir dans la minute autour de ce moment
+  const near = s.events.filter(e => (e.type === 'join' || e.type === 'leave') && e.key && Math.abs(e.t - t) <= 60000 && (!M.self || e.key !== M.self.id));
+  const d = new Date(t);
+  box.querySelector('.ichart-info').innerHTML =
+    `${pinned ? '📌 ' : ''}<b>${fmtTime(t)}:${pad(d.getSeconds())}</b> — ${who.size} autre(s) joueur(s)` +
+    (near.length ? `<div class="near">${near.map(e => `<span class="${e.type === 'join' ? 't-join' : 't-leave'}">${e.type === 'join' ? '➜' : '←'} ${esc(e.name)}</span>`).join(' ')}</div>` : '') +
+    `<div class="who">${[...who.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([k, n]) => pLink(k, n)).join(' ')}</div>`;
+  if (pinned) {
+    box.querySelector('.chart-slider').value = t;
+    box.querySelector('.chart-time').value = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    box.classList.add('pinned');
+  }
+}
+function pinChart(box, t) {
+  CHART_PIN = { sid: +box.dataset.sid, t };
+  box.querySelector('.cursor').setAttribute('visibility', 'hidden');
+  showChartTime(box, t, true);
+}
+// Après chaque affichage : on remet le moment épinglé s'il y en a un
+function initCharts() {
+  document.querySelectorAll('.ichart').forEach(box => {
+    if (CHART_PIN && CHART_PIN.sid === +box.dataset.sid) pinChart(box, CHART_PIN.t);
+  });
+}
+function timeFromMouse(box, ev) {
+  const g = chartGeom(box);
+  const r = box.querySelector('svg').getBoundingClientRect();
+  const vx = (ev.clientX - r.left) / r.width * g.W;
+  if (vx < g.L || vx > g.W - g.R) return null;
+  return g.t0 + (vx - g.L) / (g.W - g.L - g.R) * (g.t1 - g.t0);
+}
+document.addEventListener('click', ev => {
+  const box = ev.target.closest?.('.ichart');
+  if (!box) return;
+  if (ev.target.closest('svg')) { const t = timeFromMouse(box, ev); if (t) pinChart(box, t); }
+  const step = ev.target.closest('[data-chartstep]');
+  if (step) {
+    // saute à l'arrivée/au départ précédent ou suivant
+    const s = M.sessions[+box.dataset.sid];
+    const cur = CHART_PIN?.sid === s.id ? CHART_PIN.t : +box.dataset.t1;
+    const times = s.timeline.map(p => p.t);
+    const next = +step.dataset.chartstep > 0 ? times.find(t => t > cur + 500) : [...times].reverse().find(t => t < cur - 500);
+    if (next) pinChart(box, next + 1000);
+  }
+  if (ev.target.closest('.chart-unpin')) {
+    CHART_PIN = null;
+    box.classList.remove('pinned');
+    box.querySelector('.pin').setAttribute('visibility', 'hidden');
+    box.querySelector('.ichart-info').innerHTML = '🖱️ Survole pour explorer · <b>clique</b> pour épingler un moment';
+  }
+});
+document.addEventListener('input', ev => {
+  const box = ev.target.closest?.('.ichart');
+  if (!box) return;
+  if (ev.target.classList.contains('chart-slider')) pinChart(box, +ev.target.value);
+  if (ev.target.classList.contains('chart-time') && ev.target.value) {
+    const [h, m, sec = 0] = ev.target.value.split(':').map(Number);
+    const g = chartGeom(box);
+    // l'heure tapée, le jour de la session (ou le lendemain si la session passe minuit)
+    let t = new Date(g.t0).setHours(h, m, sec, 0);
+    if (t < g.t0 - 1000) t += 86400000;
+    pinChart(box, t);
+  }
+});
 // Qui était présent à l'instant t ? On "rejoue" les arrivées/départs jusqu'à t.
 function presentAt(s, t) {
   const set = new Map();
@@ -342,20 +432,20 @@ function presentAt(s, t) {
   if (M.self) set.delete(M.self.id);
   return set;
 }
+// Survol : on explore… sauf si un moment est épinglé (alors la liste ne bouge plus)
 document.addEventListener('mousemove', ev => {
   const box = ev.target.closest?.('.ichart');
-  if (!box) return;
-  const svg = box.querySelector('svg');
-  const r = svg.getBoundingClientRect();
-  const W = +box.dataset.w, L = +box.dataset.l, R = +box.dataset.r, t0 = +box.dataset.t0, t1 = +box.dataset.t1;
-  const vx = (ev.clientX - r.left) / r.width * W;
-  if (vx < L || vx > W - R) return;
-  const t = t0 + (vx - L) / (W - L - R) * (t1 - t0);
-  const line = svg.querySelector('.cursor');
-  line.setAttribute('x1', vx); line.setAttribute('x2', vx); line.setAttribute('visibility', 'visible');
-  const who = presentAt(M.sessions[+box.dataset.sid], t);
-  box.querySelector('.ichart-info').innerHTML = `<b>${fmtTime(t)}</b> — ${who.size} autre(s) joueur(s) : ` +
-    [...who.entries()].map(([k, n]) => pLink(k, n)).join(', ');
+  if (!box || !ev.target.closest('svg')) return;
+  const t = timeFromMouse(box, ev);
+  if (t == null) return;
+  if (box.classList.contains('pinned')) {
+    const g = chartGeom(box);
+    const x = g.L + (t - g.t0) / (g.t1 - g.t0) * (g.W - g.L - g.R);
+    const line = box.querySelector('.cursor');
+    line.setAttribute('x1', x); line.setAttribute('x2', x); line.setAttribute('visibility', 'visible');
+    return;
+  }
+  showChartTime(box, t, false);
 });
 
 // ---------- Une ligne d'événement (utilisée partout) ----------
@@ -575,7 +665,8 @@ function openPlayer(key) {
       <div class="card kpi"><div class="v">${new Set(p.avatarHist.map(a => a.avatar)).size}</div><div class="l">Avatars vus</div></div>
     </div>
 
-    <h2>📝 Ta note</h2>
+    ${VRC.user && String(key).startsWith('usr_') ? '<div id="vprofile"><p class="muted">⏳ Chargement du profil VRChat…</p></div>' : ''}
+    <h2>📝 Ta note VRCLogs</h2>
     <textarea id="noteBox" placeholder="Ex : super gentil, rencontré au club, aime la musique…">${esc(meta.note || '')}</textarea>
     <h2>🏷️ Tags</h2>
     <div class="tags" id="tagZone">
@@ -605,6 +696,7 @@ function openPlayer(key) {
     $('tagInput').focus();
   };
   resolveAvatars();
+  loadProfile(key);
 }
 
 // ---------------------------------------------------------------------
@@ -658,14 +750,32 @@ function openAvatarView(name) {
   const r = AV_RESULTS.get(name);
   if (!r?.found) return;
   openZoom(r.explicit ? '' : r.image, r.name, lastSheet, 'avtrDB'); // "← Retour" ramène à la fiche d'où on vient
-  $('modalBody').insertAdjacentHTML('beforeend', `
-    <div class="card avinfo">
-      ${r.explicit ? '<p>🔞 Image masquée : cet avatar est marqué comme contenu pour adultes.</p>' : ''}
-      <div>👤 Créé par <b>${esc(r.author || 'inconnu')}</b></div>
-      <div class="tags">${r.platforms.map(p => `<span class="badge">${{ pc: '💻 PC', android: '📱 Quest/Android', ios: '📱 iOS' }[p] || esc(p)}</span>`).join('')}</div>
-      <div class="fbtns"><a class="ghost btn" data-url="https://vrchat.com/home/avatar/${esc(r.id)}">Voir sur VRChat ↗</a></div>
-      <p class="muted">Recherche d'avatars publics fournie par avtrDB.</p>
-    </div>`);
+  $('modalBody').insertAdjacentHTML('beforeend', avatarDetailHtml({ ...r, status: 'public' }, 'avtrDB'));
+}
+
+// Fiche détaillée d'un avatar (les tiens comme ceux des autres)
+const PLATFORM_NAMES = { pc: '💻 PC', standalonewindows: '💻 PC', android: '📱 Quest/Android', ios: '📱 iOS' };
+const PERF_NAMES = { Excellent: 'Excellent', Good: 'Bon', Medium: 'Moyen', Poor: 'Faible', VeryPoor: 'Très faible' };
+function avatarDetailHtml(a, source) {
+  const perf = Object.entries(a.performance || {}).filter(([, v]) => v);
+  const row = (label, value) => value ? `<dt>${label}</dt><dd>${value}</dd>` : '';
+  return `<div class="card avinfo">
+    ${a.explicit ? '<p>🔞 Image masquée : cet avatar est marqué comme contenu pour adultes.</p>' : ''}
+    ${a.description ? `<div class="bio">${esc(a.description)}</div>` : ''}
+    <dl class="avdetail">
+      ${row('👤 Créateur', a.author ? `<b>${esc(a.author)}</b>` : '')}
+      ${row('🔓 Visibilité', a.status === 'public' ? '🌍 Public' : a.status ? '🔒 Privé' : '')}
+      ${row('🖥️ Plateformes', (a.platforms || []).map(p => `<span class="badge">${PLATFORM_NAMES[p] || esc(p)}</span>`).join(''))}
+      ${row('⚡ Performance', perf.map(([p, v]) => `${PLATFORM_NAMES[p] || esc(p)} : <span class="perf ${esc(v)}">${PERF_NAMES[v] || esc(v)}</span>`).join(' · '))}
+      ${row('🎨 Style', (a.styles || []).map(esc).join(', '))}
+      ${row('🏷️ Tags', (a.tags || []).slice(0, 15).map(t => `<span class="tag small">${esc(t.replace(/^(author_tag_|content_)/, ''))}</span>`).join(' '))}
+      ${row('📅 Créé le', a.created ? fmtDate(Date.parse(a.created)) : '')}
+      ${row('🔄 Mis à jour', a.updated ? `${fmtDate(Date.parse(a.updated))} (${ago(Date.parse(a.updated))})` : '')}
+      ${row('🔢 Version', a.version)}
+    </dl>
+    ${a.id && a.status === 'public' ? `<div class="fbtns"><a class="ghost btn" data-url="https://vrchat.com/home/avatar/${esc(a.id)}">Voir sur VRChat ↗</a></div>` : ''}
+    ${source === 'avtrDB' ? '<p class="muted small">Recherche d\'avatars publics fournie par avtrDB.</p>' : ''}
+  </div>`;
 }
 function setMeta(key, patch) {
   META[key] = Object.assign({ note: '', tags: [] }, META[key], patch);
@@ -976,7 +1086,7 @@ function openFriend(id) {
           ${canJoin ? `<a class="ghost btn" data-url="vrchat://launch?ref=vrclogs&id=${esc(f.location)}">🚀 Rejoindre</a>` : ''}</div>` : ''}
       </div>
     </div>
-    <div id="fbio">${f.bio ? `<h2>Bio</h2><div class="card bio">${esc(f.bio)}</div>` : ''}</div>
+    <div id="vprofile"><p class="muted">⏳ Chargement du profil VRChat…</p></div>
     ${p ? `<h2>Avec toi (d'après tes logs)</h2>
       <div class="kpis">
         <div class="card kpi"><div class="v">${p.sessions.length}</div><div class="l">Rencontres</div></div>
@@ -987,11 +1097,66 @@ function openFriend(id) {
       ${avatarHistoryHtml(p, 10, '🎭 Ses derniers avatars')}`
       : '<p class="muted">Vous ne vous êtes pas encore croisés dans tes logs.</p>'}`);
   resolveAvatars();
-  // La liste d'amis ne contient pas la bio : on va chercher la fiche complète
-  window.api.vrc.user(id).then(d => {
-    if (!d || d.error || lastSheet?.id !== id || !$('fbio')) return;
-    if (d.bio) $('fbio').innerHTML = `<h2>Bio</h2><div class="card bio">${esc(d.bio)}</div>`;
-  });
+  loadProfile(id);
+}
+
+// ---------------------------------------------------------------------
+//  Profil VRChat détaillé (bio, liens, badges, langues, groupes…)
+// ---------------------------------------------------------------------
+const LANGS = { eng: 'Anglais', fra: 'Français', spa: 'Espagnol', deu: 'Allemand', ita: 'Italien', por: 'Portugais',
+  jpn: 'Japonais', kor: 'Coréen', zho: 'Chinois', rus: 'Russe', pol: 'Polonais', nld: 'Néerlandais', swe: 'Suédois',
+  nor: 'Norvégien', dan: 'Danois', fin: 'Finnois', tur: 'Turc', ara: 'Arabe', hin: 'Hindi', tha: 'Thaï', vie: 'Vietnamien',
+  ind: 'Indonésien', ukr: 'Ukrainien', ces: 'Tchèque', hun: 'Hongrois', ron: 'Roumain', ell: 'Grec', heb: 'Hébreu',
+  ase: 'Langue des signes (ASL)', bfi: 'Langue des signes (BSL)', fsl: 'Langue des signes (LSF)', jsl: 'Langue des signes (JSL)', kvk: 'Langue des signes (KSL)' };
+const PROFILE_CACHE = new Map(); // id → { t, d } (gardé 5 minutes pour ne pas redemander)
+
+function linkLabel(url) {
+  try { return new URL(url).hostname.replace(/^www\./, '') + new URL(url).pathname.replace(/\/$/, ''); } catch { return url; }
+}
+function profileHtml(d) {
+  const facts = [
+    d.pronouns && `💬 ${esc(d.pronouns)}`,
+    d.vrcPlus && '<span class="badge vplus">VRC+</span>',
+    d.ageVerified && '<span class="badge">✅ Âge vérifié</span>',
+    d.dateJoined && `📅 Sur VRChat depuis le ${fmtDate(Date.parse(d.dateJoined))}`,
+    d.lastActivity && `🕒 Dernière activité ${ago(Date.parse(d.lastActivity))}`,
+  ].filter(Boolean);
+  const links = d.bioLinks.map(l => (/^https?:\/\//i.test(l) ? l : `https://${l}`));
+  return `
+    <div class="pfacts">${facts.join('<span class="sep">·</span>')}</div>
+    ${d.languages.length ? `<div class="tags">${d.languages.map(l => `<span class="tag">🗣️ ${esc(LANGS[l] || l.toUpperCase())}</span>`).join('')}</div>` : ''}
+    ${d.badges.length ? `<h2>🏅 Badges</h2><div class="badges">${d.badges.map(b => `
+      <div class="pbadge" title="${esc(b.desc || '')}">${vimg(b.image)}<span>${esc(b.name)}</span></div>`).join('')}</div>` : ''}
+    <h2>📝 Bio</h2>
+    <div class="card bio">${d.bio ? esc(d.bio) : '<span class="muted">Pas de bio.</span>'}</div>
+    ${links.length ? `<h2>🔗 Liens</h2><div class="plinks">${links.map(l => `<a class="ghost btn" data-url="${esc(l)}">${esc(linkLabel(l))} ↗</a>`).join('')}</div>` : ''}
+    ${d.note ? `<h2>🗒️ Ta note VRChat</h2><div class="card bio">${esc(d.note)}</div>` : ''}
+    ${d.representedGroup || d.groups.length ? `<h2>👥 Groupes ${d.groupCount ? `<span class="muted">(${d.groupCount})</span>` : ''}</h2>
+      <div class="pgroups">
+        ${d.representedGroup ? `<a class="pgroup rep" data-url="https://vrchat.com/home/group/${esc(d.representedGroup.id)}">${vimg(d.representedGroup.icon)}<span>⭐ ${esc(d.representedGroup.name)}</span></a>` : ''}
+        ${d.groups.filter(g => g.id !== d.representedGroup?.id).map(g => `<a class="pgroup" data-url="https://vrchat.com/home/group/${esc(g.id)}">${vimg(g.icon)}<span>${esc(g.name)}</span></a>`).join('')}
+      </div>` : ''}
+    ${d.worlds.length ? `<h2>🌍 Ses mondes publiés <span class="muted">(${d.worldCount})</span></h2>
+      <div class="pworlds">${d.worlds.map(w => `<a class="pworld" data-url="https://vrchat.com/home/world/${esc(w.id)}">${vimg(w.thumb)}<span>${esc(w.name)}</span></a>`).join('')}</div>` : ''}
+    <p class="muted small">Copie d'avatar : ${d.allowAvatarCopying ? 'autorisée' : 'désactivée'} · Rang : ${esc(d.rank)}</p>`;
+}
+async function loadProfile(id) {
+  const box = $('vprofile');
+  if (!box) return;
+  if (!VRC.user || !String(id).startsWith('usr_')) { box.innerHTML = ''; return; }
+  let c = PROFILE_CACHE.get(id);
+  if (!c || Date.now() - c.t > 5 * 60000) {
+    const d = await window.api.vrc.user(id);
+    if (d.error) { if ($('vprofile') && lastSheet?.id === id) $('vprofile').innerHTML = `<p class="muted">⚠️ Profil indisponible : ${esc(d.error)}</p>`; return; }
+    c = { t: Date.now(), d };
+    PROFILE_CACHE.set(id, c);
+  }
+  if (lastSheet?.id !== id || !$('vprofile')) return; // tu as ouvert une autre fiche entre-temps
+  $('vprofile').innerHTML = profileHtml(c.d);
+  // La bannière de profil en haut de la fiche
+  if (c.d.banner && !$('modalBody').querySelector('.pbanner')) {
+    $('modalBody').insertAdjacentHTML('afterbegin', `<div class="pbanner">${vimg(c.d.banner)}</div>`);
+  }
 }
 
 // Visionneuse : une image en grand
@@ -1043,7 +1208,7 @@ function openAvatar(id) {
   const a = myAvatars?.find(x => x.id === id);
   if (!a) return;
   openZoom(a.image || a.thumb, a.name);
-  if (a.description) $('modalBody').insertAdjacentHTML('beforeend', `<div class="card bio">${esc(a.description)}</div>`);
+  $('modalBody').insertAdjacentHTML('beforeend', avatarDetailHtml(a, 'vrchat'));
 }
 
 // =====================================================================
@@ -1156,12 +1321,12 @@ function checkAlerts(newEvents) {
 // =====================================================================
 //  Fenêtre détail, rendu général, clics
 // =====================================================================
-function showModal(html) { $('modalBody').innerHTML = html; $('modal').classList.remove('hidden'); }
+function showModal(html) { $('modalBody').innerHTML = html; $('modal').classList.remove('hidden'); initCharts(); }
 function hideModal() { $('modal').classList.add('hidden'); }
 
-const RENDERERS = { live: renderLive, friends: renderFriends, avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
+const RENDERERS = { live: renderLive, friends: renderFriends, brain: () => renderBrain(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
   people: renderPeople, groups: renderGroups, videos: renderVideos, stats: renderStats };
-function render() { RENDERERS[currentView](); }
+function render() { RENDERERS[currentView](); initCharts(); }
 function goTo(view) {
   currentView = view;
   document.querySelectorAll('.nav').forEach(n => n.classList.toggle('active', n.dataset.view === view));
@@ -1270,7 +1435,9 @@ applySettings();
     if (!$('modal').classList.contains('hidden')) return;
     // Les pages Amis et Avatars ne dépendent pas des logs : on ne les redessine pas
     // (sinon ce que tu es en train de taper serait effacé à chaque seconde)
-    if (['friends', 'avatars'].includes(currentView)) return;
+    if (['friends', 'avatars', 'brain'].includes(currentView)) return;
+    // Pendant que tu explores le graphique (souris dessus ou curseur en main), on attend
+    if (document.querySelector('.ichart:hover') || document.activeElement?.closest?.('.ichart')) return;
     if (currentView !== 'feed' || document.querySelector('main').scrollTop < 50) render();
   });
   window.api.onStatus(s => {

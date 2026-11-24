@@ -246,11 +246,21 @@ textarea:focus, #tagInput:focus, .opt .num:focus, .opt .txt:focus { border-color
 .s.note { color: var(--accent); }
 
 /* Graphique d'instance */
-.ichart svg { width: 100%; height: auto; display: block; cursor: crosshair; }
+.ichart svg { width: 100%; height: auto; display: block; cursor: crosshair; user-select: none; }
 .ichart .grid-line { stroke: var(--line); stroke-dasharray: 3 4; }
 .ichart .axis { fill: var(--muted); font-size: 11px; }
 .ichart .cursor { stroke: var(--text); stroke-opacity: .5; stroke-width: 1; }
 .ichart-info { margin-top: 6px; min-height: 20px; line-height: 1.7; }
+.ichart .pin { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
+.ichart-controls { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.ichart-controls .ghost { padding: 4px 10px; }
+.chart-slider { flex: 1; accent-color: var(--accent); }
+.chart-time { background: var(--card2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; color: var(--text); color-scheme: dark; }
+.chart-unpin { display: none; }
+.ichart.pinned .chart-unpin { display: inline-block; }
+.ichart.pinned { border-color: var(--accent); }
+.ichart-info .near { margin: 4px 0; display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+.ichart-info .who { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .ichart-info .dot { width: 16px; height: 16px; font-size: 8px; margin-right: 3px; }
 
 /* Résumé du jour */
@@ -337,6 +347,52 @@ img.broken { display: none; }
 .acard .n { font-weight: 600; }
 .acard .s { margin-top: 4px; font-size: 12px; }
 .acard .badge { margin: 0 4px 0 0; }
+
+/* Profil VRChat détaillé */
+.pbanner { margin: -24px -26px 16px; height: 150px; overflow: hidden; border-radius: 18px 18px 0 0; background: var(--card2); }
+.pbanner img { width: 100%; height: 100%; object-fit: cover; }
+.pfacts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 14px 0 8px; font-size: 13px; }
+.pfacts .sep { color: var(--line); }
+.badge.vplus { background: linear-gradient(90deg, #ffd166, #ff9f1c); color: #2a1600; font-weight: 700; }
+.badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.pbadge { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 12px; padding: 6px 12px 6px 6px; font-size: 13px; }
+.pbadge img { width: 34px; height: 34px; object-fit: contain; }
+.plinks { display: flex; flex-wrap: wrap; gap: 6px; }
+.pgroups { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+.pgroup { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 10px; padding: 6px; cursor: pointer; font-size: 13px; }
+.pgroup:hover { background: var(--card2); }
+.pgroup.rep { border: 1px solid var(--accent); }
+.pgroup img { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; }
+.pworlds { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.pworld { background: var(--card); border-radius: 10px; overflow: hidden; cursor: pointer; font-size: 12px; }
+.pworld img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.pworld span { display: block; padding: 6px 8px; }
+.small { font-size: 12px; }
+
+/* Cerveau d'amis */
+#view-brain.active { display: flex; flex-direction: column; height: calc(100vh - 44px); }
+.brain-wrap { position: relative; flex: 1; min-height: 400px; border-radius: 16px; overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, var(--card2), var(--bg) 75%); border: 1px solid var(--line); }
+#brainCanvas { width: 100%; height: 100%; display: block; cursor: grab; }
+.brain-tip { position: absolute; pointer-events: none; background: var(--card2); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 8px 12px; font-size: 13px; max-width: 280px; box-shadow: 0 8px 24px #0008; }
+.brain-tip.hidden { display: none; }
+.brain-legend { position: absolute; left: 12px; bottom: 10px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px;
+  background: #0007; padding: 6px 12px; border-radius: 10px; }
+.brain-legend .lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; border: 2px solid; vertical-align: middle; }
+.lg.you { border-color: var(--accent); background: var(--accent); }
+.lg.friend { border-color: var(--accent2); }
+.lg.fav { border-color: #ffd166; }
+.lg.online { border-color: #5ee6a0; background: #5ee6a0; }
+#brainCount { width: 120px; accent-color: var(--accent); }
+
+/* Détails d'un avatar */
+.avdetail { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; text-align: left; }
+.avdetail dt { color: var(--muted); }
+.avdetail dd { margin: 0; }
+.perf { font-weight: 700; }
+.perf.Excellent { color: #5ee6a0; } .perf.Good { color: #9be15d; } .perf.Medium { color: #ffd166; }
+.perf.Poor { color: #ffa94d; } .perf.VeryPoor { color: #ff5c6c; }
 
 /* Historique des avatars (public / privé) */
 .avrow { grid-template-columns: 130px 44px 1fr auto; }

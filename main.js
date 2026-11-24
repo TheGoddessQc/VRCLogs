@@ -205,7 +205,7 @@ ipcMain.handle('vrc:logout', async () => {
 });
 ipcMain.handle('vrc:refresh', () => refreshFriends(true));
 ipcMain.handle('vrc:user', async (_e, id) => {
-  try { return await vrc.userDetails(id); } catch (e) { return { error: e.message }; }
+  try { return await vrc.profile(id); } catch (e) { return { error: e.message }; }
 });
 let avatarSearch = null;
 ipcMain.handle('avatar:lookup', (_e, { name, author }) => avatarSearch.lookup(name, author));
@@ -302,8 +302,11 @@ function createWindow() {
         ['avatar-history', `hideModal(); openPlayer([...M.players.values()].sort((a, b) => b.avatarHist.length - a.avatarHist.length)[0].key); setTimeout(() => document.querySelector('.avrow')?.scrollIntoView(), 50)`],
         ['avatar-history-done', `new Promise(r => setTimeout(r, 9000))`],
         ['avatar-public', `document.querySelector('.avrow.public')?.click()`],
-        ['login', `hideModal(); goTo('friends'); const u = document.getElementById('loginUser'); if (u) { u.focus(); u.value = 'test-ecriture'; }`],
-        ['login-after', `void 0`],
+        ['brain', `hideModal(); goTo('brain'); new Promise(r => setTimeout(r, 6000))`],
+        ['brain-hover', `(() => { const n = BRAIN.nodes[3]; BRAIN.hover = n; drawBrain(); })()`],
+        ['chart-pin', `goTo('live'); const b = document.querySelector('.ichart'); if (b) pinChart(b, +b.dataset.t0 + (b.dataset.t1 - b.dataset.t0) * 0.3)`],
+        ['friend-profile', `goTo('friends'); document.querySelector('.fcard[data-friend]').click(); new Promise(r => setTimeout(r, 4000))`],
+        ['my-avatar', `hideModal(); goTo('avatars'); new Promise(r => setTimeout(r, 3000)).then(() => document.querySelector('[data-avatar]')?.click())`],
       ];
       for (const [name, js] of steps) {
         try { await win.webContents.executeJavaScript(js); } catch { continue; } // étape impossible (ex : pas connecté)

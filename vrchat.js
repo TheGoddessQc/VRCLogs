@@ -180,10 +180,41 @@ class VRChat {
       favs: favs.map(f => ({ userId: f.favoriteId, tags: f.tags || [] })),
     };
   }
-  // Fiche complète d'un joueur (la liste d'amis ne contient pas la bio)
-  async userDetails(id) {
-    const u = await this.request('GET', `/users/${encodeURIComponent(id)}`);
-    return summarizeUser(u, u.state === 'online' || (u.location && u.location !== 'offline'));
+  // Profil complet d'un joueur, comme sur VRChat.
+  // VRChat sépare les infos en deux endroits :
+  //   /users/{id}   → compte (inscription, dernière activité, ta note privée…)
+  //   /profile/{id} → vitrine (bio, liens, badges, langues, groupes, mondes…)
+  async profile(id) {
+    const uid = encodeURIComponent(id);
+    const u = await this.request('GET', `/users/${uid}`);
+    let p = {};
+    try { p = await this.request('GET', `/profile/${uid}?withGroupsAndWorlds=true`); } catch {}
+    const tags = [...(u.tags || []), ...(p.trustTags || [])];
+    const langs = (p.languages?.length ? p.languages : tags.filter(t => t.startsWith('language_')))
+      .map(l => (typeof l === 'string' ? l : l.key || l.value || '').replace('language_', ''));
+    return {
+      ...summarizeUser(u, u.state === 'online' || (u.location && u.location !== 'offline')),
+      bio: p.bio || u.bio || '',
+      bioLinks: p.bioLinks || u.bioLinks || [],
+      badges: (p.badges || []).map(b => ({ name: b.badgeName, desc: b.badgeDescription, image: b.badgeImageUrl })),
+      banner: p.bannerUrl || u.bannerUrl || '',
+      icon: p.iconUrl || u.iconUrl || u.userIcon || '',
+      pronouns: p.pronouns || u.pronouns || '',
+      languages: [...new Set(langs.filter(Boolean))],
+      rank: trustRank(tags),
+      vrcPlus: !!p.hasVrcPlus || tags.includes('system_supporter'),
+      ageVerified: !!(p.ageVerified ?? u.ageVerified),
+      dateJoined: u.date_joined || null,
+      lastActivity: u.last_activity || null,
+      note: u.note || '',
+      isFriend: !!u.isFriend,
+      allowAvatarCopying: !!u.allowAvatarCopying,
+      representedGroup: p.representedGroup ? { id: p.representedGroup.id, name: p.representedGroup.name, icon: p.representedGroup.iconUrl } : null,
+      groups: (p.groups?.list || []).map(g => ({ id: g.id || g.groupId, name: g.name, icon: g.iconUrl })),
+      groupCount: p.groups?.count || 0,
+      worlds: (p.publicWorlds || []).map(w => ({ id: w.id, name: w.name, thumb: w.thumbnailImageUrl || w.imageUrl })),
+      worldCount: p.totalPublicWorldsCount || 0,
+    };
   }
   async world(id) {
     if (this.worlds.has(id)) return this.worlds.get(id);
@@ -201,8 +232,14 @@ class VRChat {
     }
     return out.map(a => ({
       id: a.id, name: a.name, description: a.description || '',
-      image: a.imageUrl, thumb: a.thumbnailImageUrl, status: a.releaseStatus, updated: a.updated_at,
+      image: a.imageUrl, thumb: a.thumbnailImageUrl, status: a.releaseStatus,
+      created: a.created_at, updated: a.updated_at, version: a.version, author: a.authorName,
+      tags: (a.tags || []).filter(t => !t.startsWith('admin_')),
+      styles: [a.styles?.primary, a.styles?.secondary].filter(Boolean),
       platforms: [...new Set((a.unityPackages || []).map(u => u.platform))],
+      // Note de performance par plateforme (Excellent → Very Poor)
+      performance: Object.fromEntries((a.unityPackages || []).filter(u => u.performanceRating && u.variant !== 'impostor')
+        .map(u => [u.platform, u.performanceRating])),
     }));
   }
 

@@ -35,7 +35,8 @@ class AvatarSearch {
   lookup(name, author) {
     const key = `${norm(name)}|${norm(author)}`;
     const c = this.cache[key];
-    if (c && Date.now() - c.t < KEEP) return Promise.resolve(c.r);
+    // (les anciens résultats sans "description" sont redemandés pour avoir les nouveaux détails)
+    if (c && Date.now() - c.t < KEEP && (!c.r.found || 'description' in c.r)) return Promise.resolve(c.r);
 
     const run = async () => {
       const wait = this.last + GAP - Date.now();
@@ -58,7 +59,11 @@ class AvatarSearch {
         const best = author ? same.find(a => norm(a.author?.name) === norm(author)) : same[0];
         const r = best
           ? { found: true, id: best.vrc_id, name: best.name, author: best.author?.name || '', image: best.image_url,
-              platforms: best.compatibility || [], explicit: !!best.explicit }
+              platforms: best.compatibility || [], explicit: !!best.explicit,
+              description: best.description || '', created: best.created_at, updated: best.updated_at,
+              performance: { pc: best.performance?.pc_rating, android: best.performance?.android_rating, ios: best.performance?.ios_rating },
+              styles: [best.styles?.primary, best.styles?.secondary].filter(Boolean),
+              tags: [...(best.tags?.content_tags || []), ...(best.tags?.author_tags || [])] }
           : { found: false };
         this.cache[key] = { t: Date.now(), r };
         this.save();

@@ -19,6 +19,7 @@
     <nav>
       <button class="nav active" data-view="live">🟢 En direct</button>
       <button class="nav" data-view="friends">💜 Amis <span id="friendCount" class="navcount"></span></button>
+      <button class="nav" data-view="brain">🧠 Cerveau d'amis</button>
       <button class="nav" data-view="avatars">🧍 Mes avatars</button>
       <button class="nav" data-view="day">📅 Résumé du jour</button>
       <button class="nav" data-view="feed">📜 Journal</button>
@@ -38,6 +39,7 @@
     <!-- Chaque <section> est une page. Une seule est visible à la fois (classe "active"). -->
     <section id="view-live" class="view active"></section>
     <section id="view-friends" class="view"></section>
+    <section id="view-brain" class="view"></section>
     <section id="view-avatars" class="view"></section>
     <section id="view-day" class="view"></section>
 
@@ -117,5 +119,6 @@
   <div id="toasts"></div>
 
   <script src="app.js"></script>
+  <script src="brain.js"></script>
 </body>
 </html>

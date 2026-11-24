@@ -57,7 +57,13 @@ class MockVRChat {
       favs: this.people.slice(0, 6).map((p, i) => ({ userId: p.id, tags: [i < 3 ? 'group_0' : 'group_1'] })) };
   }
   async world(id) { return this.worlds.get(id); }
-  async userDetails(id) { return (await this.friends(false)).concat(await this.friends(true)).find(f => f.id === id); }
+  async profile(id) {
+    const f = (await this.friends(false)).concat(await this.friends(true)).find(x => x.id === id) || { id, name: id, online: false, location: 'offline', status: 'offline', statusDescription: '', rank: 'User' };
+    return { ...f, bio: 'Bio de test\nDeuxième ligne', bioLinks: ['https://twitter.com/test', 'twitch.tv/test'], badges: [],
+      banner: '', pronouns: 'elle/she', languages: ['fra', 'eng'], vrcPlus: true, ageVerified: true,
+      dateJoined: '2021-05-03', lastActivity: new Date().toISOString(), note: '', isFriend: true,
+      representedGroup: null, groups: [], groupCount: 0, worlds: [], worldCount: 0 };
+  }
   async myAvatars() {
     return ['Juno Collie', 'Goddess Fox', 'Night Dragon', 'Neon Kitty', 'Royal Wolf', 'Pastel Bun'].map((n, i) => ({
       id: `avtr_mock${i}`, name: n, description: 'Avatar de test', image: `https://api.vrchat.cloud/mock/av/${i}`,
