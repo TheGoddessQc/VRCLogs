@@ -1,0 +1,16 @@
+# Dépendances (réinstallées avec "npm install")
+node_modules/
+
+# Installateurs générés (publiés dans les Releases GitHub, pas dans le code)
+dist/
+
+# Fichiers système / éditeur
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Réglages locaux
+.claude/
+.env

@@ -1,0 +1,43 @@
+{
+  "name": "vrclogs",
+  "productName": "VRCLogs",
+  "version": "0.1.0",
+  "description": "Logs avancés pour VRChat : instances en direct, historique des mondes, personnes rencontrées, statistiques.",
+  "author": "TheGoddessQc",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.thegoddessqc.vrclogs",
+    "productName": "VRCLogs",
+    "files": [
+      "main.js",
+      "parser.js",
+      "preload.js",
+      "ui/**/*",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.18.0"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

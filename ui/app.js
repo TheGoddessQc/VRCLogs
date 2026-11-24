@@ -1,0 +1,902 @@
+// =====================================================================
+//  app.js — le "cerveau" de l'interface de VRCLogs
+//
+//  Comment ça marche, en résumé :
+//   1. main.js lit les logs VRChat et nous envoie une liste d'ÉVÉNEMENTS
+//      (ex : { type: 'join', name: 'hortemuus', t: 1732460400000 }).
+//   2. build() transforme cette liste en un MODÈLE plus pratique :
+//      les sessions (mondes visités), les joueurs, les groupes…
+//   3. Les fonctions render…() fabriquent le HTML de chaque page
+//      à partir du modèle.
+//   4. Quand un nouvel événement arrive, on refait build() puis render().
+// =====================================================================
+
+// ---------- Variables globales (l'"état" de l'app) ----------
+let EVENTS = [];          // tous les événements reçus
+let LIVE = false;         // VRChat est-il ouvert ?
+let M = null;             // le modèle calculé par build()
+let currentView = 'live'; // la page affichée
+let feedLimit = 300;      // nombre de lignes affichées dans le journal
+let DAY = startOfDay(Date.now()); // jour affiché dans "Résumé du jour"
+
+// localStorage = petite mémoire du navigateur qui reste après fermeture de l'app.
+// On y range les favoris, les notes, les tags et les paramètres.
+const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
+const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+const FAVS = new Set(load('favs', []));
+const META = load('meta', {}); // { cléJoueur: { note: '...', tags: ['ami', ...] } }
+const SETTINGS = Object.assign({ theme: 'goddess', compact: false, anim: true }, load('settings', {}));
+const ALERTS = Object.assign({ favs: true, newPeople: false, minMeets: 0, tags: [], silent: false }, load('alerts', {}));
+
+// ---------- Petits outils ----------
+const $ = id => document.getElementById(id);
+// esc() empêche un pseudo bizarre (ex : "<script>") de casser la page
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+function startOfDay(t) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function fmtTime(t) { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function fmtDate(t) { const d = new Date(t); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; }
+function fmtDT(t) { return `${fmtDate(t)} ${fmtTime(t)}`; }
+function fmtDayLong(t) { return new Date(t).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); }
+function fmtDur(ms) {
+  const m = Math.max(0, Math.round((ms || 0) / 60000));
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${pad(m % 60)}`;
+}
+function ago(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return "à l'instant";
+  if (m < 60) return `il y a ${m} min`;
+  if (m < 1440) return `il y a ${Math.round(m / 60)} h`;
+  return `il y a ${Math.round(m / 1440)} j`;
+}
+function hash(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.codePointAt(0)) | 0; return Math.abs(h); }
+
+// ---------- Pastilles de couleur et liens ----------
+// La couleur vient d'un "hash" de l'identifiant : même joueur = toujours même couleur.
+function dot(key, name, cls = '') {
+  const h = hash(key);
+  const letter = ([...String(name).replace(/[^\p{L}\p{N}]/gu, '')][0] || '?').toUpperCase();
+  return `<span class="dot ${cls}" style="background:linear-gradient(135deg, hsl(${h % 360} 70% 55%), hsl(${(h % 360 + 40) % 360} 75% 45%))">${esc(letter)}</span>`;
+}
+const tagsOf = key => META[key]?.tags || [];
+const tagChips = key => tagsOf(key).map(t => `<span class="tag small">#${esc(t)}</span>`).join('');
+const pLink = (key, name) => `<a class="link" data-player="${esc(key)}">${dot(key, name)}${esc(name)}</a>`;
+const sLink = (sid, name) => `<a class="link" data-session="${sid}">${esc(name)}</a>`;
+const isFresh = e => e.fresh && Date.now() - e.fresh < 2000;
+
+// =====================================================================
+//  build() : transforme la liste d'événements en modèle
+// =====================================================================
+function build() {
+  const sessions = [];          // un "passage" dans un monde
+  const players = new Map();    // Map = dictionnaire clé → valeur
+  const nameToKey = new Map();  // pseudo → identifiant (pour les avatars)
+  let self = null;
+  let cur = null;               // la session en cours pendant la lecture
+  let lastT = 0;
+
+  const getP = (key, name, id) => {
+    let p = players.get(key);
+    if (!p) {
+      p = { key, id, name, names: new Set(), first: Infinity, last: 0, time: 0,
+        sessions: [], worlds: new Map(), avatarHist: [] };
+      players.set(key, p);
+    }
+    p.name = name;
+    p.names.add(name);
+    if (id) p.id = id;
+    return p;
+  };
+  // Ajoute du "temps ensemble" à un joueur
+  const addTime = (key, ms) => {
+    const p = players.get(key);
+    if (p) { p.time += ms; p.worlds.set(cur.world, (p.worlds.get(cur.world) || 0) + ms); }
+    const sp = cur.people.get(key);
+    if (sp) sp.time += ms;
+  };
+  // Ferme la session en cours (tu as changé de monde ou quitté le jeu)
+  const close = t => {
+    if (!cur) return;
+    for (const [k, since] of cur.present) addTime(k, t - since);
+    cur.present.clear();
+    cur.end = t;
+    cur = null;
+  };
+  const tick = t => { // un point du graphique d'instance
+    cur.timeline.push({ t, c: cur.present.size });
+    if (cur.present.size > cur.peak.c) cur.peak = { t, c: cur.present.size };
+  };
+
+  // On parcourt tous les événements dans l'ordre, comme si on rejouait l'histoire
+  for (const e of EVENTS) {
+    lastT = e.t;
+    e.sid = cur ? cur.id : null;
+    switch (e.type) {
+      case 'self':
+        self = { id: e.userId, name: e.name };
+        break;
+      case 'world':
+        close(e.t);
+        cur = { id: sessions.length, worldId: e.worldId, world: e.world, instType: e.instType, region: e.region,
+          start: e.t, end: null, present: new Map(), people: new Map(), videos: [], events: [],
+          timeline: [{ t: e.t, c: 0 }], peak: { t: e.t, c: 0 } };
+        sessions.push(cur);
+        e.sid = cur.id;
+        break;
+      case 'join': {
+        if (!cur) break;
+        const key = e.userId || e.name;
+        nameToKey.set(e.name, key);
+        const p = getP(key, e.name, e.userId);
+        p.first = Math.min(p.first, e.t);
+        p.last = Math.max(p.last, e.t);
+        if (!cur.people.has(key)) {
+          cur.people.set(key, { key, name: e.name, first: e.t, time: 0 });
+          p.sessions.push(cur.id);
+        }
+        if (!cur.present.has(key)) { cur.present.set(key, e.t); tick(e.t); }
+        e.key = key;
+        break;
+      }
+      case 'leave': {
+        if (!cur) break;
+        const key = e.userId || nameToKey.get(e.name) || e.name;
+        const since = cur.present.get(key);
+        if (since != null) { addTime(key, e.t - since); cur.present.delete(key); tick(e.t); }
+        const p = players.get(key);
+        if (p) p.last = Math.max(p.last, e.t);
+        e.key = key;
+        break;
+      }
+      case 'avatar': {
+        const key = nameToKey.get(e.name);
+        if (!key) break;
+        e.key = key;
+        const h = players.get(key).avatarHist;
+        // on ignore si c'est le même avatar que juste avant
+        if (!h.length || h[h.length - 1].avatar !== e.avatar) h.push({ t: e.t, avatar: e.avatar, world: cur?.world });
+        break;
+      }
+      case 'video':
+        if (cur) cur.videos.push(e);
+        break;
+      case 'quit':
+      case 'end':
+        close(e.t);
+        break;
+    }
+    if (cur && e.type !== 'self') cur.events.push(e);
+  }
+
+  let current = null;
+  if (cur) { if (LIVE) current = cur; else close(lastT); }
+
+  // Ton propre compte : la personne présente dans (presque) toutes les sessions
+  if (!self && sessions.length) {
+    let best = null;
+    for (const p of players.values()) if (!best || p.sessions.length > best.sessions.length) best = p;
+    if (best && best.sessions.length >= sessions.length * 0.8) self = { id: best.key, name: best.name };
+  }
+  if (self) players.delete(self.id);
+
+  M = { sessions, players, self, current };
+  M.groups = detectGroups();
+}
+
+// ---------------------------------------------------------------------
+//  Détection des groupes d'amis
+//  Idée : si deux personnes ARRIVENT (ou PARTENT) à moins de 20 secondes
+//  d'intervalle, dans au moins 2 sessions différentes, elles sont
+//  probablement ensemble.
+// ---------------------------------------------------------------------
+function detectGroups() {
+  const WINDOW = 20000;
+  const pairs = new Map(); // "a|b" → Set des sessions
+  const selfId = M.self?.id;
+  const addPairs = (list, sid) => {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length && list[j].t - list[i].t <= WINDOW; j++) {
+        const a = list[i].key, b = list[j].key;
+        if (a === b) continue;
+        const k = a < b ? `${a}|${b}` : `${b}|${a}`;
+        if (!pairs.has(k)) pairs.set(k, new Set());
+        pairs.get(k).add(sid);
+      }
+    }
+  };
+  for (const s of M.sessions) {
+    const end = s.end ?? Date.now();
+    const ok = e => e.key && e.key !== selfId && M.players.has(e.key);
+    // on ignore la 1re minute (tout le monde "arrive" quand TU arrives) et la dernière (quand tu pars)
+    // Chaque "signal" compte : arrivés ensemble (j) ou repartis ensemble (l), dans chaque session
+    addPairs(s.events.filter(e => e.type === 'join' && ok(e) && e.t - s.start > 60000), `${s.id}j`);
+    addPairs(s.events.filter(e => e.type === 'leave' && ok(e) && end - e.t > 60000), `${s.id}l`);
+  }
+
+  // Liens forts = au moins 2 signaux (ex : arrivés ET repartis ensemble)
+  const links = new Map(); // joueur → [{ key, n }]
+  const parent = new Map(); // pour regrouper (algorithme "union-find")
+  const find = x => { while (parent.get(x) !== x) x = parent.get(x); return x; };
+  for (const [k, set] of pairs) {
+    if (set.size < 2) continue;
+    const [a, b] = k.split('|');
+    for (const [x, y] of [[a, b], [b, a]]) {
+      if (!links.has(x)) links.set(x, []);
+      links.get(x).push({ key: y, n: set.size });
+      if (!parent.has(x)) parent.set(x, x);
+    }
+    parent.set(find(a), find(b));
+  }
+  const groups = new Map();
+  for (const k of parent.keys()) {
+    const r = find(k);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(k);
+  }
+  for (const l of links.values()) l.sort((a, b) => b.n - a.n);
+  const list = [...groups.values()]
+    .map(members => ({ members, strength: members.reduce((a, k) => a + links.get(k).reduce((x, l) => x + l.n, 0), 0) / 2 }))
+    .sort((a, b) => b.strength - a.strength);
+  return { list, links };
+}
+
+// Temps "en direct" pour la session en cours (pas encore fermée)
+function liveExtra(key) {
+  const c = M.current;
+  if (!c || !c.present.has(key)) return 0;
+  return Date.now() - c.present.get(key);
+}
+const playerTime = p => p.time + liveExtra(p.key);
+const sessionEnd = s => s.end ?? Date.now();
+
+// =====================================================================
+//  Page : EN DIRECT
+// =====================================================================
+function renderLive() {
+  const c = M.current;
+  const el = $('view-live');
+  if (!c) {
+    const last = M.sessions[M.sessions.length - 1];
+    el.innerHTML = `<div class="hero"><div class="muted">VRChat n'est pas ouvert</div>
+      <div class="world">Rien en direct pour l'instant</div>
+      ${last ? `<div class="muted">Dernier monde : ${sLink(last.id, last.world)} · ${ago(sessionEnd(last))}</div>` : ''}</div>
+      <div class="empty">Lance VRChat : les arrivées, départs et vidéos s'afficheront ici en temps réel.</div>`;
+    return;
+  }
+  const present = [...c.present.entries()]
+    .filter(([k]) => !M.self || k !== M.self.id)
+    .map(([k, since]) => ({ k, since, p: M.players.get(k) }))
+    .sort((a, b) => FAVS.has(b.k) - FAVS.has(a.k) || a.since - b.since);
+  const recent = c.events.filter(e => e.type !== 'avatar').slice(-40).reverse();
+
+  el.innerHTML = `
+    <div class="hero">
+      <div class="muted">Tu es dans</div>
+      <div class="world">${esc(c.world)} <span class="badge">${esc(c.instType)}</span>${c.region ? `<span class="badge">${esc(c.region)}</span>` : ''}</div>
+      <div class="muted">Depuis ${fmtTime(c.start)} · ${fmtDur(Date.now() - c.start)} · ${present.length} autre(s) joueur(s) · pic : ${c.peak.c}
+        · <a class="link" data-url="https://vrchat.com/home/world/${esc(c.worldId)}">Voir le monde ↗</a></div>
+    </div>
+    <h2>Joueurs dans l'instance</h2>
+    ${instanceChart(c)}
+    <h2>Présents maintenant</h2>
+    <div class="grid">${present.map(({ k, since, p }) => {
+      const meets = p ? p.sessions.length : 1;
+      const isNew = Date.now() - since < 6000;
+      return `<div class="pcard ${FAVS.has(k) ? 'fav' : ''} ${isNew ? 'new' : ''}" data-player="${esc(k)}">
+        ${dot(k, p?.name || k)}
+        <div><div class="n">${FAVS.has(k) ? '⭐ ' : ''}${esc(p?.name || k)} ${tagChips(k)}</div>
+        <div class="s">Ici depuis ${fmtDur(Date.now() - since)} · ${meets === 1 ? 'Première rencontre ✨' : `Vu ${meets} fois · ${fmtDur(playerTime(p))} au total`}</div>
+        ${META[k]?.note ? `<div class="s note">📝 ${esc(META[k].note)}</div>` : ''}</div>
+      </div>`;
+    }).join('') || '<div class="muted">Personne d\'autre ici.</div>'}</div>
+    ${c.videos.length ? `<h2>Vidéos jouées ici</h2><div class="list">${c.videos.slice().reverse().map(rowHtml).join('')}</div>` : ''}
+    <h2>Activité de l'instance</h2>
+    <div class="list">${recent.map(rowHtml).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------------
+//  Graphique d'instance (SVG = image dessinée avec du code)
+// ---------------------------------------------------------------------
+function instanceChart(s) {
+  const W = 800, H = 150, L = 34, R = 10, T = 12, B = 22;
+  const t0 = s.start, t1 = Math.max(sessionEnd(s), t0 + 60000);
+  const max = Math.max(1, ...s.timeline.map(p => p.c));
+  const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
+  const y = c => H - B - (c / max) * (H - T - B);
+  // On dessine un "escalier" : le nombre de joueurs change d'un coup à chaque arrivée/départ
+  let d = `M${x(t0)},${y(0)}`, prev = 0;
+  for (const p of s.timeline) { d += ` L${x(p.t)},${y(prev)} L${x(p.t)},${y(p.c)}`; prev = p.c; }
+  d += ` L${x(t1)},${y(prev)}`;
+  const area = `${d} L${x(t1)},${y(0)} Z`;
+  return `<div class="card ichart" data-sid="${s.id}" data-t0="${t0}" data-t1="${t1}" data-l="${L}" data-r="${R}" data-w="${W}">
+    <svg viewBox="0 0 ${W} ${H}">
+      <defs><linearGradient id="ig${s.id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" style="stop-color:var(--accent);stop-opacity:.45"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/>
+      </linearGradient></defs>
+      <line x1="${L}" x2="${W - R}" y1="${y(max)}" y2="${y(max)}" class="grid-line"/>
+      <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" class="grid-line"/>
+      <text x="${L - 6}" y="${y(max) + 4}" class="axis" text-anchor="end">${max}</text>
+      <text x="${L - 6}" y="${y(0) + 4}" class="axis" text-anchor="end">0</text>
+      <text x="${L}" y="${H - 4}" class="axis">${fmtTime(t0)}</text>
+      <text x="${W - R}" y="${H - 4}" class="axis" text-anchor="end">${s.end ? fmtTime(t1) : 'maintenant'}</text>
+      <path d="${area}" fill="url(#ig${s.id})"/>
+      <path d="${d}" fill="none" style="stroke:var(--accent)" stroke-width="2"/>
+      <line class="cursor" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
+    </svg>
+    <div class="ichart-info muted">🖱️ Survole le graphique pour voir qui était là à chaque moment</div>
+  </div>`;
+}
+// Qui était présent à l'instant t ? On "rejoue" les arrivées/départs jusqu'à t.
+function presentAt(s, t) {
+  const set = new Map();
+  for (const e of s.events) {
+    if (e.t > t) break;
+    if (e.type === 'join' && e.key) set.set(e.key, e.name);
+    if (e.type === 'leave' && e.key) set.delete(e.key);
+  }
+  if (M.self) set.delete(M.self.id);
+  return set;
+}
+document.addEventListener('mousemove', ev => {
+  const box = ev.target.closest?.('.ichart');
+  if (!box) return;
+  const svg = box.querySelector('svg');
+  const r = svg.getBoundingClientRect();
+  const W = +box.dataset.w, L = +box.dataset.l, R = +box.dataset.r, t0 = +box.dataset.t0, t1 = +box.dataset.t1;
+  const vx = (ev.clientX - r.left) / r.width * W;
+  if (vx < L || vx > W - R) return;
+  const t = t0 + (vx - L) / (W - L - R) * (t1 - t0);
+  const line = svg.querySelector('.cursor');
+  line.setAttribute('x1', vx); line.setAttribute('x2', vx); line.setAttribute('visibility', 'visible');
+  const who = presentAt(M.sessions[+box.dataset.sid], t);
+  box.querySelector('.ichart-info').innerHTML = `<b>${fmtTime(t)}</b> — ${who.size} autre(s) joueur(s) : ` +
+    [...who.entries()].map(([k, n]) => pLink(k, n)).join(', ');
+});
+
+// ---------- Une ligne d'événement (utilisée partout) ----------
+function rowHtml(e) {
+  const s = e.sid != null ? M.sessions[e.sid] : null;
+  const ctx = s && e.type !== 'world' ? `<span class="ctx"> · ${esc(s.world)}</span>` : '';
+  let ico = '', txt = '', cls = '';
+  switch (e.type) {
+    case 'world':
+      ico = '🌍'; cls = 'world';
+      txt = `Arrivée dans ${sLink(e.sid, e.world)} <span class="badge">${esc(e.instType)}</span>`;
+      break;
+    case 'join':
+      ico = '<span class="t-join">➜</span>';
+      txt = `${pLink(e.key, e.name)} <span class="t-join">a rejoint</span>${ctx}`;
+      break;
+    case 'leave':
+      ico = '<span class="t-leave">←</span>';
+      txt = `${pLink(e.key, e.name)} <span class="t-leave">est parti</span>${ctx}`;
+      break;
+    case 'avatar':
+      ico = '<span class="t-avatar">🎭</span>';
+      txt = `${e.key ? pLink(e.key, e.name) : esc(e.name)} porte <b>${esc(e.avatar)}</b>${ctx}`;
+      break;
+    case 'video':
+      ico = '<span class="t-video">▶</span>';
+      txt = `<a class="link" data-url="${esc(e.url)}">${esc(e.url)}</a>${ctx}`;
+      break;
+  }
+  return `<div class="row ${cls} ${isFresh(e) ? 'new' : ''}"><span class="time">${fmtDT(e.t)}</span><span class="ico">${ico}</span><span>${txt}</span></div>`;
+}
+
+// =====================================================================
+//  Page : RÉSUMÉ DU JOUR
+// =====================================================================
+function renderDay() {
+  const d0 = DAY, d1 = DAY + 86400000;
+  const overlap = s => Math.max(0, Math.min(sessionEnd(s), d1) - Math.max(s.start, d0));
+  const S = M.sessions.filter(s => overlap(s) > 0);
+  const total = S.reduce((a, s) => a + overlap(s), 0);
+
+  const worldTime = new Map();
+  for (const s of S) worldTime.set(s.world, (worldTime.get(s.world) || 0) + overlap(s));
+  const topW = [...worldTime.entries()].sort((a, b) => b[1] - a[1]);
+
+  const people = new Map(); // temps passé avec chaque joueur ce jour-là
+  for (const s of S) for (const p of s.people.values()) {
+    if (!M.players.has(p.key)) continue;
+    people.set(p.key, (people.get(p.key) || 0) + p.time + (s === M.current ? liveExtra(p.key) : 0));
+  }
+  const topP = [...people.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const newbies = [...M.players.values()].filter(p => p.first >= d0 && p.first < d1);
+  const peak = S.reduce((best, s) => (!best || s.peak.c > best.peak.c ? s : best), null);
+  const videos = S.reduce((a, s) => a + s.videos.length, 0);
+  const isToday = DAY === startOfDay(Date.now());
+
+  $('view-day').innerHTML = `
+    <header class="bar">
+      <h1>Résumé du jour</h1>
+      <button class="ghost" data-day="-1">◀</button>
+      <span class="daylabel">${fmtDayLong(DAY)}${isToday ? ' (aujourd\'hui)' : ''}</span>
+      <button class="ghost" data-day="1" ${isToday ? 'disabled' : ''}>▶</button>
+    </header>
+    ${!S.length ? '<div class="empty">Pas de VRChat ce jour-là 💤</div>' : `
+    <div class="kpis">
+      <div class="card kpi"><div class="v">${fmtDur(total)}</div><div class="l">Temps en jeu</div></div>
+      <div class="card kpi"><div class="v">${worldTime.size}</div><div class="l">Mondes</div></div>
+      <div class="card kpi"><div class="v">${people.size}</div><div class="l">Personnes croisées</div></div>
+      <div class="card kpi"><div class="v">${newbies.length}</div><div class="l">Nouvelles rencontres</div></div>
+    </div>
+    <h2>Ta journée heure par heure</h2>
+    <div class="card"><div class="daybar">
+      ${S.map(s => {
+        const a = Math.max(s.start, d0), b = Math.min(sessionEnd(s), d1);
+        return `<div class="seg" data-session="${s.id}" title="${esc(s.world)} · ${fmtTime(a)} → ${fmtTime(b)}"
+          style="left:${(a - d0) / 864000}%;width:${Math.max(0.3, (b - a) / 864000)}%;background:hsl(${hash(s.worldId) % 360} 60% 50%)"></div>`;
+      }).join('')}
+    </div><div class="dayticks">${[0, 3, 6, 9, 12, 15, 18, 21, 24].map(h => `<span>${h}h</span>`).join('')}</div></div>
+    ${peak && peak.peak.c > 1 ? `<div class="card highlight">🔥 <b>Moment fort :</b> ${sLink(peak.id, peak.world)} avec <b>${peak.peak.c} joueurs</b> en même temps à ${fmtTime(peak.peak.t)}${videos ? ` · ${videos} vidéo(s) jouée(s) dans la journée` : ''}</div>` : ''}
+    <div class="cols">
+      <div><h2>Mondes</h2><div class="card">${topW.map(([w, ms]) => hbar(esc(w), ms, topW[0][1], fmtDur(ms))).join('')}</div></div>
+      <div><h2>Avec qui tu as passé le plus de temps</h2><div class="card">${topP.map(([k, ms]) => hbar(pLink(k, M.players.get(k).name), ms, topP[0][1], fmtDur(ms))).join('') || '<div class="muted">—</div>'}</div></div>
+    </div>
+    <h2>Nouvelles rencontres ✨ (${newbies.length})</h2>
+    <div class="tags">${newbies.map(p => `<a class="tag link" data-player="${esc(p.key)}">${dot(p.key, p.name)}${esc(p.name)}</a>`).join('') || '<span class="muted">Personne de nouveau.</span>'}</div>`}`;
+}
+
+// =====================================================================
+//  Page : JOURNAL
+// =====================================================================
+function feedFiltered() {
+  const types = new Set([...document.querySelectorAll('#feedTypes input:checked')].map(i => i.value));
+  const q = $('feedSearch').value.trim().toLowerCase();
+  const days = +$('feedRange').value;
+  let from = 0;
+  if (days === 1) from = startOfDay(Date.now());
+  else if (days) from = Date.now() - days * 86400000;
+  const out = [];
+  for (let i = EVENTS.length - 1; i >= 0; i--) {
+    const e = EVENTS[i];
+    if (e.t < from) break;
+    if (!types.has(e.type)) continue;
+    if (q) {
+      const s = e.sid != null ? M.sessions[e.sid].world : '';
+      const hay = `${e.name || ''} ${e.world || ''} ${e.avatar || ''} ${e.url || ''} ${s}`.toLowerCase();
+      if (!hay.includes(q)) continue;
+    }
+    out.push(e);
+  }
+  return out;
+}
+function renderFeed() {
+  const list = feedFiltered();
+  $('feedCount').textContent = `${list.length.toLocaleString('fr')} événement(s)`;
+  $('feedList').innerHTML = list.slice(0, feedLimit).map(rowHtml).join('') || '<div class="empty">Aucun résultat.</div>';
+  $('feedMore').style.display = list.length > feedLimit ? '' : 'none';
+}
+async function exportCsv() {
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = ['Date;Heure;Type;Joueur;Monde;Détail'];
+  for (const e of feedFiltered().reverse()) {
+    const s = e.sid != null ? M.sessions[e.sid].world : '';
+    lines.push([fmtDate(e.t), fmtTime(e.t), e.type, e.name, e.world || s, e.avatar || e.url || e.instType].map(q).join(';'));
+  }
+  if (await window.api.exportCsv(lines.join('\r\n'))) toast('✅ Export CSV enregistré');
+}
+
+// =====================================================================
+//  Page : MONDES  +  fiche d'une session
+// =====================================================================
+function renderWorlds() {
+  const q = $('worldSearch').value.trim().toLowerCase();
+  const list = M.sessions.filter(s => !q || s.world.toLowerCase().includes(q)).slice(-400).reverse();
+  let lastDay = '';
+  $('worldList').innerHTML = list.map(s => {
+    const day = fmtDate(s.start);
+    const head = day !== lastDay ? `<h2>${day}</h2>` : '';
+    lastDay = day;
+    const others = [...s.people.keys()].filter(k => !M.self || k !== M.self.id).length;
+    return `${head}<div class="card click wcard" data-session="${s.id}">
+      <div class="title">${esc(s.world)} <span class="badge">${esc(s.instType)}</span>${s === M.current ? '<span class="badge">EN COURS</span>' : ''}</div>
+      <div class="muted">${fmtTime(s.start)} → ${s.end ? fmtTime(s.end) : 'maintenant'}</div>
+      <div class="muted">${others} personne(s) · pic ${s.peak.c} · ${s.videos.length} vidéo(s)</div>
+      <div><b>${fmtDur(sessionEnd(s) - s.start)}</b></div>
+    </div>`;
+  }).join('') || '<div class="empty">Aucun monde trouvé.</div>';
+}
+
+function openSession(id) {
+  const s = M.sessions[id];
+  const people = [...s.people.values()]
+    .filter(p => M.players.has(p.key))
+    .map(p => ({ ...p, time: p.time + (s === M.current ? liveExtra(p.key) : 0) }))
+    .sort((a, b) => b.time - a.time);
+  const visits = M.sessions.filter(x => x.worldId === s.worldId);
+  showModal(`
+    <h1>${esc(s.world)} <span class="badge">${esc(s.instType)}</span></h1>
+    <p class="muted">${fmtDT(s.start)} → ${s.end ? fmtTime(s.end) : 'en cours'} · ${fmtDur(sessionEnd(s) - s.start)}
+      · Visité ${visits.length} fois · <a class="link" data-url="https://vrchat.com/home/world/${esc(s.worldId)}">Page du monde ↗</a></p>
+    <h2>Joueurs dans l'instance</h2>
+    ${instanceChart(s)}
+    <h2>Personnes présentes (${people.length})</h2>
+    ${people.map(p => hbar(pLink(p.key, p.name), p.time, people[0]?.time || 1, fmtDur(p.time))).join('') || '<div class="muted">Personne.</div>'}
+    ${s.videos.length ? `<h2>Vidéos</h2><div class="list">${s.videos.map(rowHtml).join('')}</div>` : ''}
+    <h2>Chronologie</h2>
+    <div class="list">${s.events.filter(e => e.type !== 'avatar').map(rowHtml).join('')}</div>`);
+}
+
+// =====================================================================
+//  Page : PERSONNES  +  fiche joueur (notes, tags, avatars, amis)
+// =====================================================================
+function renderPeople() {
+  const q = $('peopleSearch').value.trim().toLowerCase();
+  const sort = $('peopleSort').value;
+  const favOnly = $('favOnly').checked;
+  const match = p => {
+    if (!q) return true;
+    const m = META[p.key] || {};
+    const hay = [...p.names, m.note || '', ...(m.tags || []).map(t => '#' + t)].join(' ').toLowerCase();
+    return hay.includes(q);
+  };
+  const list = [...M.players.values()].filter(p => (!favOnly || FAVS.has(p.key)) && match(p));
+  const sorters = {
+    time: (a, b) => playerTime(b) - playerTime(a),
+    meets: (a, b) => b.sessions.length - a.sessions.length,
+    last: (a, b) => b.last - a.last,
+    name: (a, b) => a.name.localeCompare(b.name),
+  };
+  list.sort(sorters[sort]);
+  $('peopleList').innerHTML = `<div class="trow head"><span></span><span>Joueur (${list.length})</span><span>Rencontres</span><span>Temps ensemble</span><span>Dernière fois</span></div>` +
+    list.slice(0, 500).map(p => `<div class="trow" data-player="${esc(p.key)}">
+      <span class="star ${FAVS.has(p.key) ? 'on' : ''}" data-fav="${esc(p.key)}" title="Favori (alerte quand il/elle arrive)">★</span>
+      <span>${dot(p.key, p.name)}${esc(p.name)} ${tagChips(p.key)}${META[p.key]?.note ? ' <span title="A une note">📝</span>' : ''}</span>
+      <span>${p.sessions.length}</span><span>${fmtDur(playerTime(p))}</span><span class="muted">${ago(p.last)}</span>
+    </div>`).join('');
+}
+
+let openPlayerKey = null; // le joueur dont la fiche est ouverte
+function openPlayer(key) {
+  const p = M.players.get(key);
+  if (!p) return;
+  openPlayerKey = key;
+  const meta = META[key] || {};
+  const worlds = [...p.worlds.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const sess = p.sessions.slice().reverse().slice(0, 30).map(id => M.sessions[id]);
+  const friends = (M.groups.links.get(key) || []).slice(0, 12);
+  const allTags = [...new Set(Object.values(META).flatMap(m => m.tags || []))];
+  showModal(`
+    <h1>${dot(key, p.name, 'big')}${esc(p.name)} <span class="star ${FAVS.has(key) ? 'on' : ''}" data-fav="${esc(key)}" title="Favori">★</span></h1>
+    <p class="muted">Première rencontre : ${fmtDT(p.first)} · Dernière fois : ${fmtDT(p.last)} (${ago(p.last)})
+      ${p.id ? ` · <a class="link" data-url="https://vrchat.com/home/user/${esc(p.id)}">Profil VRChat ↗</a>` : ''}</p>
+    <div class="kpis">
+      <div class="card kpi"><div class="v">${p.sessions.length}</div><div class="l">Rencontres</div></div>
+      <div class="card kpi"><div class="v">${fmtDur(playerTime(p))}</div><div class="l">Temps ensemble</div></div>
+      <div class="card kpi"><div class="v">${p.worlds.size}</div><div class="l">Mondes partagés</div></div>
+      <div class="card kpi"><div class="v">${new Set(p.avatarHist.map(a => a.avatar)).size}</div><div class="l">Avatars vus</div></div>
+    </div>
+
+    <h2>📝 Ta note</h2>
+    <textarea id="noteBox" placeholder="Ex : super gentil, rencontré au club, aime la musique…">${esc(meta.note || '')}</textarea>
+    <h2>🏷️ Tags</h2>
+    <div class="tags" id="tagZone">
+      ${(meta.tags || []).map(t => `<span class="tag">#${esc(t)} <a class="x" data-untag="${esc(t)}">✕</a></span>`).join('')}
+      <input id="tagInput" list="tagList" placeholder="+ ajouter un tag (Entrée)">
+      <datalist id="tagList">${allTags.map(t => `<option value="${esc(t)}">`).join('')}</datalist>
+    </div>
+
+    ${friends.length ? `<h2>🫂 Arrive souvent avec</h2>
+      <div class="tags">${friends.map(f => `<a class="tag link" data-player="${esc(f.key)}">${dot(f.key, M.players.get(f.key)?.name || f.key)}${esc(M.players.get(f.key)?.name || f.key)} <span class="muted">×${f.n}</span></a>`).join('')}</div>` : ''}
+    ${p.names.size > 1 ? `<h2>Anciens pseudos</h2><div class="tags">${[...p.names].map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : ''}
+    <h2>Mondes où vous étiez ensemble</h2>
+    ${worlds.map(([w, ms]) => hbar(esc(w), ms, worlds[0][1] || 1, fmtDur(ms))).join('')}
+    ${p.avatarHist.length ? `<h2>🎭 Historique des avatars</h2>
+      <div class="list">${p.avatarHist.slice().reverse().slice(0, 40).map(a => `<div class="row"><span class="time">${fmtDT(a.t)}</span><span class="ico t-avatar">🎭</span><span><b>${esc(a.avatar)}</b>${a.world ? `<span class="ctx"> · ${esc(a.world)}</span>` : ''}</span></div>`).join('')}</div>` : ''}
+    <h2>Rencontres récentes</h2>
+    <div class="list">${sess.map(s => `<div class="row"><span class="time">${fmtDT(s.start)}</span><span class="ico">🌍</span><span>${sLink(s.id, s.world)} <span class="ctx">· ${fmtDur((s.people.get(key)?.time || 0) + (s === M.current ? liveExtra(key) : 0))} ensemble</span></span></div>`).join('')}</div>`);
+
+  // Sauvegarde de la note à chaque frappe
+  $('noteBox').oninput = e => { setMeta(key, { note: e.target.value }); };
+  // Ajout d'un tag avec la touche Entrée
+  $('tagInput').onkeydown = e => {
+    if (e.key !== 'Enter') return;
+    const t = e.target.value.trim().replace(/^#/, '').toLowerCase();
+    if (!t) return;
+    setMeta(key, { tags: [...new Set([...(META[key]?.tags || []), t])] });
+    openPlayer(key);
+    $('tagInput').focus();
+  };
+}
+function setMeta(key, patch) {
+  META[key] = Object.assign({ note: '', tags: [] }, META[key], patch);
+  save('meta', META);
+}
+
+// =====================================================================
+//  Page : GROUPES
+// =====================================================================
+function renderGroups() {
+  const { list, links } = M.groups;
+  $('view-groups').innerHTML = `
+    <header class="bar"><h1>Groupes d'amis détectés</h1></header>
+    <p class="muted">Des joueurs qui arrivent ou repartent à moins de 20 secondes d'écart, au moins 2 fois, sont probablement venus ensemble.</p>
+    ${list.length ? list.map((g, i) => `
+      <div class="card group">
+        <div class="title">Groupe ${i + 1} <span class="badge">${g.members.length} personnes</span></div>
+        <div class="tags">${g.members
+          .sort((a, b) => links.get(b).length - links.get(a).length)
+          .map(k => `<a class="tag link" data-player="${esc(k)}">${dot(k, M.players.get(k)?.name || k)}${esc(M.players.get(k)?.name || k)}</a>`).join('')}</div>
+      </div>`).join('') : '<div class="empty">Pas encore assez de données. Plus tu joues, plus la détection sera précise !</div>'}`;
+}
+
+// =====================================================================
+//  Page : VIDÉOS
+// =====================================================================
+// Une même vidéo YouTube peut avoir plusieurs URL : on les ramène à un seul identifiant
+function videoKey(url) {
+  const m = url.match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/live\/)([\w-]{11})/);
+  return m ? `https://youtu.be/${m[1]}` : url.split('#')[0];
+}
+function renderVideos() {
+  const map = new Map();
+  for (const s of M.sessions) for (const v of s.videos) {
+    const k = videoKey(v.url);
+    if (!map.has(k)) map.set(k, { url: k, count: 0, last: 0, first: v.t, worlds: new Set() });
+    const o = map.get(k);
+    o.count++; o.last = Math.max(o.last, v.t); o.worlds.add(s.world);
+  }
+  const q = $('videoSearch').value.trim().toLowerCase();
+  const list = [...map.values()].filter(v => !q || (v.url + [...v.worlds].join(' ')).toLowerCase().includes(q));
+  list.sort($('videoSort').value === 'count' ? (a, b) => b.count - a.count || b.last - a.last : (a, b) => b.last - a.last);
+  $('videoList').innerHTML = `<div class="muted">${list.length} vidéo(s) différente(s)</div>` + list.map(v => `
+    <div class="row vrow"><span class="time">${fmtDT(v.last)}</span><span class="ico t-video">▶</span>
+      <span><a class="link" data-url="${esc(v.url)}">${esc(v.url)}</a>
+      <span class="ctx"> · ${[...v.worlds].map(esc).join(', ')}</span></span>
+      <span class="badge">×${v.count}</span></div>`).join('');
+}
+
+// =====================================================================
+//  Page : STATISTIQUES
+// =====================================================================
+function hbar(label, v, max, valTxt) {
+  return `<div class="hbar"><span class="lab">${label}</span><span class="track"><span class="fill" style="width:${Math.max(2, (v / max) * 100)}%;display:block"></span></span><span class="val">${valTxt}</span></div>`;
+}
+function renderStats() {
+  const S = M.sessions;
+  const total = S.reduce((a, s) => a + (sessionEnd(s) - s.start), 0);
+  const worldTime = new Map();
+  const worldIds = new Set();
+  for (const s of S) { worldTime.set(s.world, (worldTime.get(s.world) || 0) + sessionEnd(s) - s.start); worldIds.add(s.worldId); }
+  const topW = [...worldTime.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const topP = [...M.players.values()].sort((a, b) => playerTime(b) - playerTime(a)).slice(0, 10);
+
+  // Avatars les plus populaires = portés par le plus de joueurs différents
+  const avPop = new Map();
+  for (const p of M.players.values()) for (const a of new Set(p.avatarHist.map(h => h.avatar))) avPop.set(a, (avPop.get(a) || 0) + 1);
+  const topA = [...avPop.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  const hours = new Array(24).fill(0);
+  for (const s of S) for (let t = s.start; t < sessionEnd(s); t += 60000) hours[new Date(t).getHours()] += 1;
+  const days = [];
+  const today = startOfDay(Date.now());
+  for (let i = 13; i >= 0; i--) {
+    const d0 = today - i * 86400000, d1 = d0 + 86400000;
+    let ms = 0;
+    for (const s of S) ms += Math.max(0, Math.min(sessionEnd(s), d1) - Math.max(s.start, d0));
+    days.push({ d0, ms });
+  }
+  const maxH = Math.max(1, ...hours), maxD = Math.max(1, ...days.map(d => d.ms));
+  const since = S.length ? fmtDate(S[0].start) : '—';
+
+  $('view-stats').innerHTML = `
+    <header class="bar"><h1>Statistiques</h1><span class="muted">Historique sauvegardé depuis le ${since}</span></header>
+    <div class="kpis">
+      <div class="card kpi"><div class="v">${fmtDur(total)}</div><div class="l">Temps en jeu</div></div>
+      <div class="card kpi"><div class="v">${worldIds.size}</div><div class="l">Mondes différents</div></div>
+      <div class="card kpi"><div class="v">${M.players.size}</div><div class="l">Personnes rencontrées</div></div>
+      <div class="card kpi"><div class="v">${S.reduce((a, s) => a + s.videos.length, 0)}</div><div class="l">Vidéos vues</div></div>
+    </div>
+    <h2>Temps de jeu — 14 derniers jours</h2>
+    <div class="card"><div class="vbars">${days.map(d => `<div class="col" data-gotoday="${d.d0}" title="${fmtDate(d.d0)} : ${fmtDur(d.ms)} (clique pour le résumé)"><div class="b" style="height:${(d.ms / maxD) * 100}%"></div><span class="x">${new Date(d.d0).getDate()}</span></div>`).join('')}</div></div>
+    <h2>À quelle heure tu joues</h2>
+    <div class="card"><div class="vbars">${hours.map((m, h) => `<div class="col" title="${h}h : ${fmtDur(m * 60000)}"><div class="b" style="height:${(m / maxH) * 100}%"></div><span class="x">${h}</span></div>`).join('')}</div></div>
+    <div class="cols">
+      <div><h2>Mondes favoris</h2><div class="card">${topW.map(([w, ms]) => hbar(esc(w), ms, topW[0][1], fmtDur(ms))).join('') || '<div class="muted">—</div>'}</div></div>
+      <div><h2>Personnes les plus vues</h2><div class="card">${topP.map(p => hbar(pLink(p.key, p.name), playerTime(p), playerTime(topP[0]), fmtDur(playerTime(p)))).join('') || '<div class="muted">—</div>'}</div></div>
+    </div>
+    <h2>🎭 Avatars les plus populaires <span class="muted">(nombre de joueurs qui l'ont porté)</span></h2>
+    <div class="card">${topA.map(([a, n]) => hbar(esc(a), n, topA[0][1], `${n} joueur(s)`)).join('') || '<div class="muted">—</div>'}</div>`;
+}
+
+// =====================================================================
+//  PARAMÈTRES (apparence, alertes, données)
+// =====================================================================
+const THEMES = [
+  { id: 'goddess', name: 'Goddess', a: '#ffc857', b: '#e8323f', bg: '#1d1513' },
+  { id: 'violet', name: 'Violet', a: '#b388ff', b: '#ff7ac6', bg: '#1c1829' },
+  { id: 'ocean', name: 'Océan', a: '#4fd1ff', b: '#6c7bff', bg: '#131b27' },
+  { id: 'menthe', name: 'Menthe', a: '#5ef0b6', b: '#2fc4c4', bg: '#14201c' },
+];
+let settingsTab = 'look';
+function applySettings() {
+  document.documentElement.dataset.theme = SETTINGS.theme;
+  document.body.classList.toggle('compact', SETTINGS.compact);
+  document.body.classList.toggle('no-anim', !SETTINGS.anim);
+  save('settings', SETTINGS);
+}
+function openSettings(tab = settingsTab) {
+  settingsTab = tab;
+  const tabs = [['look', '🎨 Apparence'], ['alerts', '🔔 Alertes'], ['data', '💾 Données']];
+  let body = '';
+  if (tab === 'look') {
+    body = `
+      <h2>Thème</h2>
+      <div class="themes">${THEMES.map(t => `
+        <div class="theme ${SETTINGS.theme === t.id ? 'on' : ''}" data-theme-pick="${t.id}" style="background:${t.bg}">
+          <div class="sw" style="background:linear-gradient(135deg, ${t.a}, ${t.b})"></div>${t.name}
+        </div>`).join('')}</div>
+      <h2>Options</h2>
+      <label class="opt"><span>📏 Mode compact <span class="muted">— lignes plus petites</span></span><input type="checkbox" data-set="compact" ${SETTINGS.compact ? 'checked' : ''}></label>
+      <label class="opt"><span>✨ Animations</span><input type="checkbox" data-set="anim" ${SETTINGS.anim ? 'checked' : ''}></label>`;
+  } else if (tab === 'alerts') {
+    const allTags = [...new Set(Object.values(META).flatMap(m => m.tags || []))];
+    body = `
+      <p class="muted">Tu reçois une notification Windows quand quelqu'un qui correspond arrive dans ton instance.</p>
+      <label class="opt"><span>⭐ Mes favoris</span><input type="checkbox" data-alert="favs" ${ALERTS.favs ? 'checked' : ''}></label>
+      <label class="opt"><span>✨ Une personne que je n'ai jamais vue</span><input type="checkbox" data-alert="newPeople" ${ALERTS.newPeople ? 'checked' : ''}></label>
+      <label class="opt"><span>🔁 Quelqu'un que j'ai déjà croisé au moins <input type="number" min="0" max="999" class="num" data-alert="minMeets" value="${ALERTS.minMeets}"> fois <span class="muted">(0 = désactivé)</span></span></label>
+      <label class="opt"><span>🏷️ Ces tags : <input class="txt" data-alert="tags" value="${esc(ALERTS.tags.join(', '))}" placeholder="ex : ami, club"></span></label>
+      ${allTags.length ? `<p class="muted">Tes tags existants : ${allTags.map(t => '#' + esc(t)).join(' ')}</p>` : ''}
+      <label class="opt"><span>🔇 Notifications silencieuses (sans son)</span><input type="checkbox" data-alert="silent" ${ALERTS.silent ? 'checked' : ''}></label>
+      <button class="ghost" id="testAlert">🔔 Tester une notification</button>`;
+  } else {
+    body = `
+      <p>VRChat efface ses vieux logs. VRCLogs garde une <b>copie permanente</b> de tout ton historique.</p>
+      <div class="opt"><span>${EVENTS.length.toLocaleString('fr')} événements sauvegardés depuis le ${EVENTS.length ? fmtDate(EVENTS[0].t) : '—'}</span></div>
+      <div class="opt"><span>⭐ ${FAVS.size} favori(s) · 📝 ${Object.values(META).filter(m => m.note).length} note(s) · 🏷️ ${Object.values(META).filter(m => m.tags?.length).length} joueur(s) tagués</span></div>
+      <button class="ghost" id="openData">💾 Ouvrir le dossier de sauvegarde</button>
+      <button class="ghost" id="openLogs">📁 Ouvrir le dossier des logs VRChat</button>`;
+  }
+  showModal(`<h1>⚙️ Paramètres</h1>
+    <div class="tabs">${tabs.map(([id, n]) => `<button class="tabbtn ${id === tab ? 'on' : ''}" data-stab="${id}">${n}</button>`).join('')}</div>
+    ${body}`);
+  if ($('testAlert')) $('testAlert').onclick = () => notify('🔔 Test', 'Les alertes fonctionnent !');
+  if ($('openData')) $('openData').onclick = () => window.api.openDataFolder();
+  if ($('openLogs')) $('openLogs').onclick = () => window.api.openLogFolder();
+}
+// Quand on modifie une option dans les paramètres
+document.addEventListener('input', e => {
+  const s = e.target.dataset.set, a = e.target.dataset.alert;
+  if (s) { SETTINGS[s] = e.target.checked; applySettings(); }
+  if (a) {
+    const t = e.target;
+    ALERTS[a] = t.type === 'checkbox' ? t.checked : a === 'minMeets' ? +t.value || 0
+      : t.value.split(',').map(x => x.trim().replace(/^#/, '').toLowerCase()).filter(Boolean);
+    save('alerts', ALERTS);
+  }
+});
+
+// =====================================================================
+//  ALERTES
+// =====================================================================
+function notify(title, body) {
+  new Notification(title, { body, silent: ALERTS.silent });
+  toast(`<b>${esc(title)}</b><br>${esc(body)}`);
+}
+function toast(html) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = html;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 6000);
+}
+// Pour chaque nouvelle arrivée : est-ce qu'elle correspond à une alerte ?
+function checkAlerts(newEvents) {
+  const hits = [];
+  for (const e of newEvents) {
+    if (e.type !== 'join' || !e.key || !M.players.has(e.key)) continue;
+    const p = M.players.get(e.key);
+    const why = [];
+    if (ALERTS.favs && FAVS.has(e.key)) why.push('⭐ favori');
+    if (ALERTS.newPeople && p.sessions.length === 1) why.push('✨ nouvelle personne');
+    if (ALERTS.minMeets > 0 && p.sessions.length - 1 >= ALERTS.minMeets) why.push(`🔁 vu ${p.sessions.length - 1} fois`);
+    const tagHit = tagsOf(e.key).filter(t => ALERTS.tags.includes(t));
+    if (tagHit.length) why.push(tagHit.map(t => '#' + t).join(' '));
+    if (why.length) hits.push({ name: e.name, why });
+  }
+  if (!hits.length) return;
+  const where = M.current?.world || 'ton instance';
+  // Si beaucoup d'alertes d'un coup (ex : tu arrives dans un monde), on regroupe
+  if (hits.length > 3) notify(`🔔 ${hits.length} alertes dans ${where}`, hits.map(h => h.name).join(', '));
+  else for (const h of hits) notify(`🔔 ${h.name} est arrivé(e)`, `${h.why.join(' · ')} — ${where}`);
+}
+
+// =====================================================================
+//  Fenêtre détail, rendu général, clics
+// =====================================================================
+function showModal(html) { $('modalBody').innerHTML = html; $('modal').classList.remove('hidden'); }
+function hideModal() { $('modal').classList.add('hidden'); }
+
+const RENDERERS = { live: renderLive, day: renderDay, feed: renderFeed, worlds: renderWorlds,
+  people: renderPeople, groups: renderGroups, videos: renderVideos, stats: renderStats };
+function render() { RENDERERS[currentView](); }
+function goTo(view) {
+  currentView = view;
+  document.querySelectorAll('.nav').forEach(n => n.classList.toggle('active', n.dataset.view === view));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  render();
+}
+function setStatus() {
+  const s = $('status');
+  s.className = 'status ' + (LIVE ? 'on' : 'off');
+  s.textContent = LIVE ? 'VRChat ouvert' : 'VRChat fermé';
+}
+
+// UN SEUL écouteur de clics pour toute l'app ("délégation d'événements") :
+// on regarde sur quoi on a cliqué grâce aux attributs data-…
+document.addEventListener('click', e => {
+  const hit = sel => e.target.closest(sel);
+  let el;
+  if ((el = hit('[data-fav]'))) {
+    e.stopPropagation();
+    const k = el.dataset.fav;
+    FAVS.has(k) ? FAVS.delete(k) : FAVS.add(k);
+    save('favs', [...FAVS]);
+    el.classList.toggle('on', FAVS.has(k));
+    render();
+    return;
+  }
+  if ((el = hit('[data-untag]'))) {
+    const key = openPlayerKey;
+    if (key) { setMeta(key, { tags: tagsOf(key).filter(t => t !== el.dataset.untag) }); openPlayer(key); }
+    return;
+  }
+  if ((el = hit('[data-theme-pick]'))) {
+    SETTINGS.theme = el.dataset.themePick;
+    applySettings();
+    document.querySelectorAll('.theme').forEach(t => t.classList.toggle('on', t === el));
+    return;
+  }
+  if ((el = hit('[data-stab]'))) return openSettings(el.dataset.stab);
+  if ((el = hit('[data-day]'))) { DAY = startOfDay(DAY + +el.dataset.day * 86400000 + 3600000 * 2); return renderDay(); }
+  if ((el = hit('[data-gotoday]'))) { DAY = +el.dataset.gotoday; return goTo('day'); }
+  if ((el = hit('[data-url]'))) return window.api.openUrl(el.dataset.url);
+  if ((el = hit('[data-player]'))) return openPlayer(el.dataset.player);
+  if ((el = hit('[data-session]'))) return openSession(+el.dataset.session);
+  if ((el = hit('.nav'))) return goTo(el.dataset.view);
+});
+$('modalClose').onclick = hideModal;
+$('modal').onclick = e => { if (e.target.id === 'modal') hideModal(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideModal(); });
+$('openSettings').onclick = () => openSettings();
+$('exportCsv').onclick = exportCsv;
+$('feedMore').onclick = () => { feedLimit += 300; renderFeed(); };
+['feedSearch', 'feedRange'].forEach(id => $(id).addEventListener('input', () => { feedLimit = 300; renderFeed(); }));
+$('feedTypes').addEventListener('change', () => { feedLimit = 300; renderFeed(); });
+$('worldSearch').addEventListener('input', renderWorlds);
+['peopleSearch', 'peopleSort', 'favOnly'].forEach(id => $(id).addEventListener('input', renderPeople));
+['videoSearch', 'videoSort'].forEach(id => $(id).addEventListener('input', renderVideos));
+applySettings();
+
+// =====================================================================
+//  DÉMARRAGE
+// =====================================================================
+(async () => {
+  // "await" = on attend la réponse de main.js avant de continuer
+  const init = await window.api.init();
+  EVENTS = init.events;
+  LIVE = init.live;
+  build();
+  setStatus();
+  render();
+
+  // Nouveaux événements en direct
+  window.api.onEvents(evs => {
+    const now = Date.now();
+    evs.forEach(e => { e.fresh = now; }); // pour l'animation des nouvelles lignes
+    EVENTS.push(...evs);
+    build();
+    checkAlerts(evs);
+    // On ne redessine pas si une fenêtre est ouverte (pour ne pas te déranger pendant que tu écris une note)
+    if (!$('modal').classList.contains('hidden')) return;
+    if (currentView !== 'feed' || document.querySelector('main').scrollTop < 50) render();
+  });
+  window.api.onStatus(s => {
+    if (s.live !== LIVE) { LIVE = s.live; build(); setStatus(); render(); }
+  });
+  setInterval(() => { if (currentView === 'live' && $('modal').classList.contains('hidden')) renderLive(); }, 30000);
+})();

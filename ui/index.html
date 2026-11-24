@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<!--
+  index.html = la STRUCTURE de la page (les "boîtes").
+  style.css  = l'APPARENCE (couleurs, tailles).
+  app.js     = le COMPORTEMENT (ce qui se passe quand on clique, les calculs).
+-->
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <!-- Sécurité : la page n'a le droit de charger que ses propres fichiers -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+  <title>VRCLogs</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Barre de gauche : chaque bouton a un data-view qui dit quelle page il ouvre -->
+  <aside class="sidebar">
+    <div class="brand">VRC<span>Logs</span></div>
+    <nav>
+      <button class="nav active" data-view="live">🟢 En direct</button>
+      <button class="nav" data-view="day">📅 Résumé du jour</button>
+      <button class="nav" data-view="feed">📜 Journal</button>
+      <button class="nav" data-view="worlds">🌍 Mondes</button>
+      <button class="nav" data-view="people">👥 Personnes</button>
+      <button class="nav" data-view="groups">🫂 Groupes</button>
+      <button class="nav" data-view="videos">🎵 Vidéos</button>
+      <button class="nav" data-view="stats">📊 Statistiques</button>
+    </nav>
+    <div class="side-foot">
+      <div id="status" class="status off">VRChat fermé</div>
+      <button id="openSettings" class="ghost">⚙️ Paramètres</button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- Chaque <section> est une page. Une seule est visible à la fois (classe "active"). -->
+    <section id="view-live" class="view active"></section>
+    <section id="view-day" class="view"></section>
+
+    <section id="view-feed" class="view">
+      <header class="bar">
+        <h1>Journal</h1>
+        <input id="feedSearch" type="search" placeholder="Rechercher un joueur, un monde, un avatar, une URL…">
+        <select id="feedRange">
+          <option value="1">Aujourd'hui</option>
+          <option value="7">7 derniers jours</option>
+          <option value="30">30 derniers jours</option>
+          <option value="0" selected>Tout</option>
+        </select>
+        <button id="exportCsv" class="ghost">⬇ Export CSV</button>
+      </header>
+      <div class="chips" id="feedTypes">
+        <label><input type="checkbox" value="world" checked> 🌍 Mondes</label>
+        <label><input type="checkbox" value="join" checked> ➜ Arrivées</label>
+        <label><input type="checkbox" value="leave" checked> ← Départs</label>
+        <label><input type="checkbox" value="avatar"> 🎭 Avatars</label>
+        <label><input type="checkbox" value="video" checked> ▶ Vidéos</label>
+      </div>
+      <div id="feedCount" class="muted"></div>
+      <div id="feedList" class="list"></div>
+      <button id="feedMore" class="ghost more">Afficher plus</button>
+    </section>
+
+    <section id="view-worlds" class="view">
+      <header class="bar">
+        <h1>Historique des mondes</h1>
+        <input id="worldSearch" type="search" placeholder="Rechercher un monde…">
+      </header>
+      <div id="worldList" class="list"></div>
+    </section>
+
+    <section id="view-people" class="view">
+      <header class="bar">
+        <h1>Personnes rencontrées</h1>
+        <input id="peopleSearch" type="search" placeholder="Nom, #tag ou mot dans une note…">
+        <select id="peopleSort">
+          <option value="time">Trier : temps ensemble</option>
+          <option value="meets">Trier : nombre de rencontres</option>
+          <option value="last">Trier : vu récemment</option>
+          <option value="name">Trier : nom</option>
+        </select>
+        <label class="inline"><input type="checkbox" id="favOnly"> ⭐ Favoris</label>
+      </header>
+      <div id="peopleList" class="table"></div>
+    </section>
+
+    <section id="view-groups" class="view"></section>
+
+    <section id="view-videos" class="view">
+      <header class="bar">
+        <h1>Vidéos et musiques</h1>
+        <input id="videoSearch" type="search" placeholder="Rechercher une URL ou un monde…">
+        <select id="videoSort">
+          <option value="last">Trier : plus récentes</option>
+          <option value="count">Trier : plus jouées</option>
+        </select>
+      </header>
+      <div id="videoList" class="list"></div>
+    </section>
+
+    <section id="view-stats" class="view"></section>
+  </main>
+
+  <!-- Fenêtre qui s'ouvre par-dessus (fiche joueur, monde, paramètres) -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="close" id="modalClose">✕</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- Petites notifications en haut à droite -->
+  <div id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
