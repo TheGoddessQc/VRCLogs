@@ -14,10 +14,16 @@ async function renderSteam() {
     STEAM.local = await window.api.steam.local();
     STEAM.hasKey = await window.api.steam.hasKey();
   }
-  const accounts = STEAM.local.accounts.filter(a => a.minutes != null || a.mostRecent);
+  // Par défaut : seulement les comptes enregistrés dans Steam. Les "anciens comptes" sont des
+  // dossiers laissés par d'autres comptes qui se sont déjà connectés à Steam sur ce PC.
+  const withVRChat = STEAM.local.accounts.filter(a => a.minutes != null || a.mostRecent);
+  const oldCount = withVRChat.filter(a => !a.remembered).length;
+  const accounts = withVRChat.filter(a => a.remembered || SETTINGS.steamShowOld);
+  const oldToggle = oldCount ? `<label class="inline small"><input type="checkbox" id="steamShowOld" ${SETTINGS.steamShowOld ? 'checked' : ''}> Afficher les anciens comptes de ce PC (${oldCount})</label>` : '';
   if (!STEAM.local.found || !accounts.length) {
-    el.innerHTML = `<header class="bar"><h1>🎮 Steam</h1></header>
-      <div class="empty">Steam n'a pas été trouvé sur ce PC, ou VRChat n'a jamais été lancé avec Steam.</div>`;
+    el.innerHTML = `<header class="bar"><h1>🎮 Steam</h1>${oldToggle}</header>
+      <div class="empty">Steam n'a pas été trouvé sur ce PC, ou VRChat n'a jamais été lancé avec ton compte Steam.</div>`;
+    bindOldToggle();
     return;
   }
   const acc = accounts.find(a => a.steamId === SETTINGS.steamAccount) || accounts[0];
@@ -30,7 +36,8 @@ async function renderSteam() {
   el.innerHTML = `
     <header class="bar">
       <h1>🎮 Steam</h1>
-      ${accounts.length > 1 ? `<select id="steamAccount">${accounts.map(a => `<option value="${a.steamId}" ${a.steamId === acc.steamId ? 'selected' : ''}>${esc(a.name)}${a.minutes != null ? ` — ${Math.round(a.minutes / 60)} h` : ''}</option>`).join('')}</select>` : `<span class="muted">${esc(acc.name)}</span>`}
+      ${oldToggle}
+      ${accounts.length > 1 ? `<select id="steamAccount">${accounts.map(a => `<option value="${a.steamId}" ${a.steamId === acc.steamId ? 'selected' : ''}>${esc(a.name)}${a.remembered ? '' : ' (ancien compte)'}${a.minutes != null ? ` — ${Math.round(a.minutes / 60)} h` : ''}</option>`).join('')}</select>` : `<span class="muted">${esc(acc.name)}</span>`}
     </header>
     <div class="kpis">
       <div class="card kpi"><div class="v">${Math.floor(minutes / 60).toLocaleString('fr')} h</div><div class="l">Sur VRChat au total ${t ? '<span class="badge">exact</span>' : '<span class="muted">(lu sur ton PC)</span>'}</div></div>
@@ -48,6 +55,7 @@ async function renderSteam() {
     STEAM.time = null; STEAM.friends = null; renderSteam();
   };
   bindSteam(acc);
+  bindOldToggle();
   // Avec une clé : heures exactes + amis (une seule fois, puis bouton 🔄)
   if (STEAM.hasKey && !STEAM.loading) {
     if (!STEAM.time || STEAM.time.steamId !== acc.steamId) {
@@ -106,6 +114,15 @@ function steamFriendsHtml() {
         <div class="s">${f.since ? `Ami Steam depuis ${fmtDate(f.since)}` : ''}</div>
       </div>
     </div>`).join('') || '<div class="empty">Aucun ami Steam ne joue à VRChat (ou leurs profils sont privés).</div>'}</div>`;
+}
+
+function bindOldToggle() {
+  if ($('steamShowOld')) $('steamShowOld').onchange = e => {
+    SETTINGS.steamShowOld = e.target.checked;
+    save('settings', SETTINGS);
+    STEAM.time = null; STEAM.friends = null;
+    renderSteam();
+  };
 }
 
 async function loadSteamFriends(acc, force) {

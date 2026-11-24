@@ -90,6 +90,8 @@ class Steam {
       if (!users[id64] && !app) continue; // dossier sans VRChat et compte inconnu : on ignore
       accounts.push({
         steamId: id64,
+        // "remembered" = compte enregistré dans Steam sur ce PC (sinon : vieux dossier d'un compte déjà utilisé ici)
+        remembered: !!users[id64],
         name: u.PersonaName || persona || u.AccountName || `Compte ${accountId}`,
         mostRecent: get(u, 'MostRecent') === '1',
         minutes: app ? Number(app.Playtime || 0) : null,          // minutes au total

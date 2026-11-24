@@ -305,8 +305,9 @@ function renderLive() {
 // ---------------------------------------------------------------------
 //  Graphique d'instance (SVG = image dessinée avec du code)
 // ---------------------------------------------------------------------
-function instanceChart(s) {
-  const W = 800, H = 150, L = 34, R = 10, T = 12, B = 22;
+function instanceChart(s, width) {
+  // Largeur réelle disponible : le texte garde la même taille, que la fenêtre soit petite ou en plein écran
+  const W = width || Math.max(600, Math.round((document.querySelector('main')?.clientWidth || 860) - 90)), H = 170, L = 34, R = 10, T = 12, B = 22;
   const t0 = s.start, t1 = Math.max(sessionEnd(s), t0 + 60000);
   const max = Math.max(1, ...s.timeline.map(p => p.c));
   const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
@@ -400,9 +401,13 @@ document.addEventListener('click', ev => {
     // saute à l'arrivée/au départ précédent ou suivant
     const s = M.sessions[+box.dataset.sid];
     const cur = CHART_PIN?.sid === s.id ? CHART_PIN.t : +box.dataset.t1;
-    const times = s.timeline.map(p => p.t);
-    const next = +step.dataset.chartstep > 0 ? times.find(t => t > cur + 500) : [...times].reverse().find(t => t < cur - 500);
-    if (next) pinChart(box, next + 1000);
+    // On se place toujours OFFSET ms APRÈS un événement (pour l'inclure dans la liste).
+    // Donc l'événement où on est = cur - OFFSET : on cherche strictement avant / après lui.
+    const OFFSET = 500;
+    const times = [...new Set(s.timeline.map(p => p.t))].sort((a, b) => a - b);
+    const here = cur - OFFSET;
+    const next = +step.dataset.chartstep > 0 ? times.find(t => t > here) : [...times].reverse().find(t => t < here);
+    if (next != null) pinChart(box, next + OFFSET);
   }
   if (ev.target.closest('.chart-unpin')) {
     CHART_PIN = null;
@@ -609,7 +614,7 @@ function openSession(id) {
     <p class="muted">${fmtDT(s.start)} → ${s.end ? fmtTime(s.end) : 'en cours'} · ${fmtDur(sessionEnd(s) - s.start)}
       · Visité ${visits.length} fois · <a class="link" data-url="https://vrchat.com/home/world/${esc(s.worldId)}">Page du monde ↗</a></p>
     <h2>Joueurs dans l'instance</h2>
-    ${instanceChart(s)}
+    ${instanceChart(s, 740)}
     <h2>Personnes présentes (${people.length})</h2>
     ${people.map(p => hbar(pLink(p.key, p.name), p.time, people[0]?.time || 1, fmtDur(p.time))).join('') || '<div class="muted">Personne.</div>'}
     ${s.videos.length ? `<h2>Vidéos</h2><div class="list">${s.videos.map(rowHtml).join('')}</div>` : ''}
