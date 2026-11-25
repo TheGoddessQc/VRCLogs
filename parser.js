@@ -27,7 +27,13 @@ class LogParser {
 
   parseLine(raw) {
     const m = LINE_RE.exec(raw.trim());
-    if (!m) return null;
+    if (!m) {
+      // Au démarrage, VRChat écrit un bloc d'infos sans date, dont « XR Device: None » (mode bureau)
+      // ou le nom du casque (mode VR). On s'en sert pour savoir si tu joues en VR.
+      const xr = /^\s+XR Device:\s*(.+?)\s*$/.exec(raw);
+      if (xr && this.lastT) return { t: this.lastT, file: this.file, type: 'xr', device: xr[1] };
+      return null;
+    }
     const t = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
     this.lastT = t;
     const msg = m[7];

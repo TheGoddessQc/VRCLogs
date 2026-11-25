@@ -95,7 +95,7 @@ let doneFiles = new Set(); // fichiers de log terminés et déjà sauvegardés
 
 // À augmenter quand parser.js apprend à reconnaître de nouvelles lignes :
 // les logs encore présents sur le PC seront relus une fois.
-const PARSER_VERSION = 2;
+const PARSER_VERSION = 3; // 3 : mode VR ou bureau (XR Device)
 function saveState() {
   fs.writeFileSync(STATE, JSON.stringify({ done: [...doneFiles], v: PARSER_VERSION }));
 }
@@ -280,6 +280,24 @@ ipcMain.handle('discord:hasWebhook', () => webhook.has());
 ipcMain.handle('discord:setWebhook', safe((_e, url) => webhook.set(url)));
 ipcMain.handle('discord:clearWebhook', () => webhook.clear());
 ipcMain.handle('discord:post', (_e, msg) => webhook.post(msg || {}));
+
+// Titre et image d'une vidéo jouée dans un monde (YouTube, via sa page publique "oEmbed", sans clé)
+const MEDIA = new Map();
+ipcMain.handle('media:info', async (_e, url) => {
+  let u;
+  try { u = new URL(String(url)); } catch { return null; }
+  const host = u.hostname.replace(/^www\.|^m\./, '');
+  if (MEDIA.has(u.href)) return MEDIA.get(u.href);
+  let info = { title: null, image: null, music: /music\.youtube\.com|soundcloud\.com|spotify\.com/.test(host), host };
+  if (/^(youtube\.com|music\.youtube\.com|youtu\.be)$/.test(host)) {
+    try {
+      const res = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(u.href)}`, { headers: { 'User-Agent': UA } });
+      if (res.ok) { const j = await res.json(); info.title = j.title || null; info.image = /^https:\/\//.test(j.thumbnail_url || '') ? j.thumbnail_url : null; }
+    } catch {}
+  }
+  MEDIA.set(u.href, info);
+  return info;
+});
 
 // ---------- Chatbox VRChat (OSC) ----------
 const chatbox = new Chatbox();
@@ -469,6 +487,7 @@ function createWindow() {
         ['whatsnew', `showWhatsNew('0.3.0')`],
         ['srv-status', `hideModal(); NEWS.tab = 'status'; goTo('news'); new Promise(r => setTimeout(r, 3000))`],
         ['changelog', `NEWS.tab = 'app'; renderNews()`],
+        ['integrations', `openSettings('integrations')`],
         ['lang-click', `openSettings('look'); setTimeout(() => document.querySelector('[data-lang="ja"]').click(), 300); 'ok'`],
         ['lang-after', `new Promise(r => setTimeout(r, 5000)).then(() => { openSettings('look'); return document.documentElement.lang; })`],
         ['lang-back', `openSettings('look'); setTimeout(() => document.querySelector('[data-lang="fr"]').click(), 300); 'ok'`],

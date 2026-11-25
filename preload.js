@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('api', {
     clearWebhook: () => ipcRenderer.invoke('discord:clearWebhook'),
     post: msg => ipcRenderer.invoke('discord:post', msg),
   },
+  mediaInfo: url => ipcRenderer.invoke('media:info', url),
   // Chatbox VRChat (texte au-dessus de ta tête, par OSC)
   chatbox: {
     send: (text, sound) => ipcRenderer.invoke('chatbox:send', { text, sound }),

@@ -151,7 +151,10 @@ class DiscordPresence {
     if (!a) this.activity = null;
     else {
       const act = {
-        type: 0, // « Joue à … »
+        // 0 = « Joue à … », 2 = « Écoute … », 3 = « Regarde … »
+        type: [0, 2, 3].includes(a.type) ? a.type : 0,
+        // 2 = Discord affiche la 1re ligne (le nom du monde) au lieu du nom de l'app dans ton statut
+        status_display_type: a.showDetails ? 2 : undefined,
         details: line(a.details),
         state: line(a.state),
         timestamps: a.start ? { start: Math.floor(a.start) } : undefined,

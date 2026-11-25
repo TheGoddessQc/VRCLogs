@@ -76,6 +76,7 @@ function build() {
   let self = null;
   let cur = null;               // la session en cours pendant la lecture
   let lastT = 0;
+  let xrDevice = null;          // « None » = mode bureau, sinon le casque VR
 
   const getP = (key, name, id) => {
     let p = players.get(key);
@@ -119,7 +120,7 @@ function build() {
         break;
       case 'world':
         close(e.t);
-        cur = { id: sessions.length, worldId: e.worldId, world: e.world, instType: e.instType, region: e.region,
+        cur = { id: sessions.length, worldId: e.worldId, world: e.world, instance: e.instance, instType: e.instType, region: e.region,
           start: e.t, end: null, present: new Map(), people: new Map(), videos: [], events: [],
           timeline: [{ t: e.t, c: 0 }], peak: { t: e.t, c: 0 } };
         sessions.push(cur);
@@ -162,6 +163,9 @@ function build() {
       case 'avatarinfo': // qui a créé cet avatar (pour mieux le retrouver dans la base publique)
         avAuthor.set(e.avatar, e.author);
         break;
+      case 'xr': // VR ou mode bureau (lu au démarrage de VRChat)
+        xrDevice = e.device;
+        break;
       case 'worldstore': // ce monde a une boutique
         if (cur) cur.storeId = e.storeId;
         break;
@@ -173,7 +177,7 @@ function build() {
         close(e.t);
         break;
     }
-    if (cur && !['self', 'avatarinfo', 'worldstore'].includes(e.type)) cur.events.push(e);
+    if (cur && !['self', 'avatarinfo', 'worldstore', 'xr'].includes(e.type)) cur.events.push(e);
   }
 
   let current = null;
@@ -187,7 +191,8 @@ function build() {
   }
   if (self) players.delete(self.id);
 
-  M = { sessions, players, self, current, avAuthor };
+  // vr : true = casque, false = mode bureau, null = on ne sait pas
+  M = { sessions, players, self, current, avAuthor, vr: xrDevice == null ? null : !/^none$/i.test(xrDevice) };
   M.groups = detectGroups();
 }
 
@@ -1284,9 +1289,11 @@ function applySettings() {
 }
 function openSettings(tab = settingsTab) {
   settingsTab = tab;
-  const tabs = [['look', '🎨 Apparence'], ['alerts', '🔔 Alertes'], ['data', '💾 Données'], ['update', '🔄 Mises à jour']];
+  const tabs = [['look', '🎨 Apparence'], ['alerts', '🔔 Alertes'], ['integrations', '🔌 Intégrations'], ['data', '💾 Données'], ['update', '🔄 Mises à jour']];
   let body = '';
-  if (tab === 'update') {
+  if (tab === 'integrations') {
+    body = integrationsTabHtml(); // dans ui/discord.js
+  } else if (tab === 'update') {
     body = updateTabHtml();
   } else if (tab === 'look') {
     const p = currentPalette();
@@ -1441,6 +1448,12 @@ document.addEventListener('input', e => {
   }
   const s = e.target.dataset.set, a = e.target.dataset.alert;
   if (s) { SETTINGS[s] = e.target.checked; applySettings(); }
+  // Une option du statut Discord (onglet 🔌 Intégrations)
+  if (e.target.dataset.rp) {
+    SETTINGS.rp = { ...SETTINGS.rp, [e.target.dataset.rp]: e.target.checked };
+    save('settings', SETTINGS);
+    rpChanged(e.target.dataset.rp);
+  }
   if (a) {
     const t = e.target;
     ALERTS[a] = t.type === 'checkbox' ? t.checked : a === 'minMeets' ? +t.value || 0
