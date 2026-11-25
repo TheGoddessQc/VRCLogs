@@ -6,7 +6,7 @@
 // L'application Discord OFFICIELLE de VRCLogs (comme VRCX) : créée une fois par l'autrice,
 // sur discord.com/developers. Ce numéro est PUBLIC (il dit juste à Discord quel nom et quel logo
 // afficher) : tout le monde peut l'utiliser, sans rien configurer.
-const VRCLOGS_APP_ID = '';
+const VRCLOGS_APP_ID = '1574994157393543292';
 
 const DISCORD = Object.assign({
   clientId: '',          // (avancé) Application ID personnel, à la place de celui de VRCLogs
