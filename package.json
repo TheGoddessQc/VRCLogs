@@ -8,7 +8,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "verifier": "node scripts/verifier-avant-envoi.js",
+    "verifier:installateur": "node scripts/verifier-avant-envoi.js --installateur"
   },
   "build": {
     "appId": "com.thegoddessqc.vrclogs",
