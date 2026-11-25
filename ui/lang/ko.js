@@ -387,4 +387,12 @@ I18N.ko = {
   "✅ Connecté(e) à Steam : clé enregistrée": "✅ Steam 로그인 완료: 키 저장됨",
   "Steam refuse de créer une clé pour ce compte (il faut avoir dépensé au moins 5 $ sur Steam).": "Steam이 이 계정의 키를 만들어 주지 않아요 (Steam에서 최소 5달러를 사용해야 해요).",
   "Temps écoulé (10 minutes).": "시간이 초과됐어요 (10분).",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Automatique : dès que Discord est ouvert sur ce PC, tes amis Discord voient le monde VRChat où tu es, depuis combien de temps et combien de joueurs. Rien à configurer.": "자동: 이 PC에서 디스코드가 열려 있으면, 디스코드 친구들이 지금 있는 VRChat 월드, 머문 시간, 플레이어 수를 볼 수 있어요. 설정할 것이 없어요.",
+  "🔒 Dans une instance privée (Invite), le nom du monde est caché.": "🔒 비공개 인스턴스(Invite)에서는 월드 이름이 숨겨져요.",
+  "🙈 Pour le cacher : dans Discord, Paramètres → Confidentialité de l'activité → « Partager mon activité ».": "🙈 숨기려면: 디스코드 설정 → 활동 개인정보 보호 → \"내 활동 공유\".",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "○ {0}": "○ {0}",
+  "Connexion à Discord…": "디스코드에 연결 중…",
+  "VRChat est fermé : rien n'est affiché sur ton profil.": "VRChat이 꺼져 있어요: 프로필에 아무것도 표시되지 않아요.",
 };

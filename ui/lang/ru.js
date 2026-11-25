@@ -387,4 +387,12 @@ I18N.ru = {
   "✅ Connecté(e) à Steam : clé enregistrée": "✅ Вход в Steam выполнен: ключ сохранён",
   "Steam refuse de créer une clé pour ce compte (il faut avoir dépensé au moins 5 $ sur Steam).": "Steam не создаёт ключ для этого аккаунта (нужно потратить в Steam хотя бы 5 $).",
   "Temps écoulé (10 minutes).": "Время вышло (10 минут).",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Automatique : dès que Discord est ouvert sur ce PC, tes amis Discord voient le monde VRChat où tu es, depuis combien de temps et combien de joueurs. Rien à configurer.": "Автоматически: как только Discord открыт на этом ПК, друзья в Discord видят мир VRChat, в котором ты находишься, как долго и сколько там игроков. Ничего настраивать не нужно.",
+  "🔒 Dans une instance privée (Invite), le nom du monde est caché.": "🔒 В приватном инстансе (Invite) название мира скрыто.",
+  "🙈 Pour le cacher : dans Discord, Paramètres → Confidentialité de l'activité → « Partager mon activité ».": "🙈 Чтобы скрыть: в Discord Настройки → Конфиденциальность активности → «Делиться моей активностью».",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "○ {0}": "○ {0}",
+  "Connexion à Discord…": "Подключение к Discord…",
+  "VRChat est fermé : rien n'est affiché sur ton profil.": "VRChat закрыт: в профиле ничего не показывается.",
 };

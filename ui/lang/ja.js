@@ -387,4 +387,12 @@ I18N.ja = {
   "✅ Connecté(e) à Steam : clé enregistrée": "✅ Steamにログインしました：キーを保存しました",
   "Steam refuse de créer une clé pour ce compte (il faut avoir dépensé au moins 5 $ sur Steam).": "Steamはこのアカウントのキーを作成できません（Steamで5ドル以上の購入が必要です）。",
   "Temps écoulé (10 minutes).": "時間切れです（10分）。",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Automatique : dès que Discord est ouvert sur ce PC, tes amis Discord voient le monde VRChat où tu es, depuis combien de temps et combien de joueurs. Rien à configurer.": "自動：このPCでDiscordが開いていれば、Discordのフレンドに今いるVRChatのワールド、滞在時間、プレイヤー数が表示されます。設定は不要です。",
+  "🔒 Dans une instance privée (Invite), le nom du monde est caché.": "🔒 プライベートインスタンス（Invite）では、ワールド名は表示されません。",
+  "🙈 Pour le cacher : dans Discord, Paramètres → Confidentialité de l'activité → « Partager mon activité ».": "🙈 非表示にするには：Discordの設定 → アクティビティのプライバシー →「アクティビティを共有」。",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "○ {0}": "○ {0}",
+  "Connexion à Discord…": "Discordに接続中…",
+  "VRChat est fermé : rien n'est affiché sur ton profil.": "VRChatが閉じています：プロフィールには何も表示されません。",
 };

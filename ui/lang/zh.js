@@ -387,4 +387,12 @@ I18N.zh = {
   "✅ Connecté(e) à Steam : clé enregistrée": "✅ 已登录 Steam：密钥已保存",
   "Steam refuse de créer une clé pour ce compte (il faut avoir dépensé au moins 5 $ sur Steam).": "Steam 拒绝为此账号创建密钥（需要在 Steam 上消费至少 5 美元）。",
   "Temps écoulé (10 minutes).": "已超时（10 分钟）。",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Automatique : dès que Discord est ouvert sur ce PC, tes amis Discord voient le monde VRChat où tu es, depuis combien de temps et combien de joueurs. Rien à configurer.": "自动：只要这台电脑上打开了 Discord，你的 Discord 好友就能看到你所在的 VRChat 世界、停留时间和玩家人数。无需任何设置。",
+  "🔒 Dans une instance privée (Invite), le nom du monde est caché.": "🔒 在私人房间（Invite）中，世界名称会被隐藏。",
+  "🙈 Pour le cacher : dans Discord, Paramètres → Confidentialité de l'activité → « Partager mon activité ».": "🙈 如需隐藏：在 Discord 中，设置 → 活动隐私 → “分享我的活动”。",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "○ {0}": "○ {0}",
+  "Connexion à Discord…": "正在连接 Discord…",
+  "VRChat est fermé : rien n'est affiché sur ton profil.": "VRChat 未运行：你的个人资料上不会显示任何内容。",
 };

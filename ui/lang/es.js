@@ -387,4 +387,12 @@ I18N.es = {
   "✅ Connecté(e) à Steam : clé enregistrée": "✅ Conectado a Steam: clave guardada",
   "Steam refuse de créer une clé pour ce compte (il faut avoir dépensé au moins 5 $ sur Steam).": "Steam no permite crear una clave para esta cuenta (hay que haber gastado al menos 5 $ en Steam).",
   "Temps écoulé (10 minutes).": "Tiempo agotado (10 minutos).",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Automatique : dès que Discord est ouvert sur ce PC, tes amis Discord voient le monde VRChat où tu es, depuis combien de temps et combien de joueurs. Rien à configurer.": "Automático: en cuanto Discord está abierto en este PC, tus amigos de Discord ven el mundo de VRChat en el que estás, desde hace cuánto y cuántos jugadores hay. Nada que configurar.",
+  "🔒 Dans une instance privée (Invite), le nom du monde est caché.": "🔒 En una instancia privada (Invite), el nombre del mundo se oculta.",
+  "🙈 Pour le cacher : dans Discord, Paramètres → Confidentialité de l'activité → « Partager mon activité ».": "🙈 Para ocultarlo: en Discord, Ajustes → Privacidad de la actividad → «Compartir mi actividad».",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "○ {0}": "○ {0}",
+  "Connexion à Discord…": "Conectando con Discord…",
+  "VRChat est fermé : rien n'est affiché sur ton profil.": "VRChat está cerrado: no se muestra nada en tu perfil.",
 };
