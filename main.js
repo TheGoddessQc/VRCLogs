@@ -231,6 +231,9 @@ ipcMain.handle('vrc:store', safe((_e, storeId) => vrc.store(storeId)));
 ipcMain.handle('vrc:spotlight', safe(() => vrc.spotlight()));
 ipcMain.handle('vrc:worldBrief', safe((_e, id) => vrc.world(id)));
 ipcMain.handle('vrc:groupBrief', safe((_e, id) => vrc.group(id)));
+ipcMain.handle('vrc:myGroups', safe(() => vrc.myGroups()));
+ipcMain.handle('vrc:groupInstances', safe(() => vrc.groupInstances()));
+ipcMain.handle('vrc:groupDetails', safe((_e, id) => vrc.groupDetails(id)));
 
 let avatarSearch = null;
 ipcMain.handle('avatar:lookup', (_e, { name, author }) => avatarSearch.lookup(name, author));
@@ -331,6 +334,9 @@ function createWindow() {
         ['avatar-public', `document.querySelector('.avrow.public')?.click()`],
         ['steam', `hideModal(); goTo('steam'); new Promise(r => setTimeout(r, 3000))`],
         ['news', `goTo('news'); new Promise(r => setTimeout(r, 4000))`],
+        ['vgroups', `hideModal(); goTo('vgroups'); new Promise(r => setTimeout(r, 6000))`],
+        ['vgroup', `document.querySelector('.vgcard').click(); new Promise(r => setTimeout(r, 5000))`],
+        ['circles', `hideModal(); goTo('groups')`],
         ['shop', `goTo('shop'); new Promise(r => setTimeout(r, 15000))`],
         ['shop-store', `document.querySelector('.spotcard:not(.nostore)')?.click(); new Promise(r => setTimeout(r, 3000))`],
         ['shop-visited', `hideModal(); SHOP.tab = 'visited'; renderShop(); new Promise(r => setTimeout(r, 2000))`],

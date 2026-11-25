@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('api', {
   spotlight: () => ipcRenderer.invoke('vrc:spotlight'),
   worldBrief: id => ipcRenderer.invoke('vrc:worldBrief', id),
   groupBrief: id => ipcRenderer.invoke('vrc:groupBrief', id),
+  myGroups: () => ipcRenderer.invoke('vrc:myGroups'),
+  groupInstances: () => ipcRenderer.invoke('vrc:groupInstances'),
+  groupDetails: id => ipcRenderer.invoke('vrc:groupDetails', id),
   // Avatars publics (base avtrDB)
   avatarLookup: (name, author) => ipcRenderer.invoke('avatar:lookup', { name, author }),
   // Compte VRChat

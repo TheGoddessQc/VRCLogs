@@ -224,6 +224,43 @@ class VRChat {
     const cat = type => (d.categories || []).find(c => c.type === type)?.ids || [];
     return { worlds: cat('worlds'), groups: cat('groups'), updated: r?.[0]?.updatedAt || null };
   }
+  // ---------- Groupes VRChat ----------
+  // Tous les groupes dont tu fais partie
+  async myGroups() {
+    const list = await this.request('GET', `/users/${encodeURIComponent(this.user.id)}/groups`);
+    return list.map(g => ({
+      id: g.groupId || g.id, name: g.name, code: g.shortCode ? `${g.shortCode}.${g.discriminator}` : '',
+      icon: g.iconUrl, banner: g.bannerUrl, members: g.memberCount || 0, privacy: g.privacy,
+      representing: !!g.isRepresenting, mutual: !!g.mutualGroup, owner: g.ownerId === this.user.id,
+      lastPost: g.lastPostCreatedAt || null, unread: !!(g.lastPostCreatedAt && (!g.lastPostReadAt || g.lastPostReadAt < g.lastPostCreatedAt)),
+    }));
+  }
+  // Les instances de groupe ouvertes EN CE MOMENT dans tes groupes
+  async groupInstances() {
+    const r = await this.request('GET', `/users/${encodeURIComponent(this.user.id)}/instances/groups`);
+    return (r.instances || []).map(i => ({
+      location: i.location || `${i.worldId}:${i.instanceId}`, groupId: i.ownerId, worldId: i.worldId,
+      world: i.world ? { name: i.world.name, thumb: i.world.thumbnailImageUrl } : null,
+      users: i.n_users ?? i.userCount ?? 0, capacity: i.capacity || 0, full: !!i.full,
+      region: (i.region || '').toUpperCase(), access: i.groupAccessType || i.type, name: i.displayName || i.name || '',
+      platforms: i.platforms || {}, queue: i.queueEnabled ? i.queueSize || 0 : null, ageGate: !!i.ageGate,
+    }));
+  }
+  // Fiche complète d'un groupe : description, règles, liens, annonce, dernières publications
+  async groupDetails(id) {
+    const gid = encodeURIComponent(id);
+    const g = await this.request('GET', `/groups/${gid}?includeRoles=false&purpose=group`);
+    let announcement = null, posts = [];
+    try { const a = await this.request('GET', `/groups/${gid}/announcement`); if (a?.id) announcement = { title: a.title, text: a.text, image: a.imageUrl, date: a.createdAt }; } catch {}
+    try { posts = ((await this.request('GET', `/groups/${gid}/posts?n=5&offset=0&publicOnly=false`)).posts || []).map(p => ({ title: p.title, text: p.text, image: p.imageUrl, date: p.createdAt })); } catch {}
+    return {
+      id, name: g.name, code: g.shortCode ? `${g.shortCode}.${g.discriminator}` : '', icon: g.iconUrl, banner: g.bannerUrl,
+      description: g.description || '', rules: g.rules || '', links: g.links || [], languages: g.languages || [],
+      members: g.memberCount || 0, online: g.onlineMemberCount || 0, verified: !!g.isVerified, privacy: g.privacy, joinState: g.joinState,
+      createdAt: g.createdAt, joinedAt: g.myMember?.joinedAt || null, representing: !!g.myMember?.isRepresenting,
+      storeId: g.storeId || null, announcement, posts,
+    };
+  }
   // Petite fiche d'un groupe (avec l'identifiant de sa boutique)
   async group(id) {
     if (!this.groups) this.groups = new Map();

@@ -28,7 +28,8 @@ Qui était là, combien de temps, dans quel monde, avec quel avatar — tout, en
 - 👥 **Personnes** — temps passé ensemble, rencontres, anciens pseudos, historique des avatars
 - 📝 **Notes et tags** — écris une note sur quelqu'un, classe tes contacts avec des `#tags`
 - 🔔 **Alertes** — notification quand un favori, un tag ou une nouvelle personne arrive dans ton instance
-- 🫂 **Groupes d'amis** — détecte les joueurs qui arrivent et repartent ensemble
+- 🫂 **Cercles d'amis** — détecte les joueurs qui arrivent et repartent ensemble
+- 🏛️ **Groupes VRChat** — tes groupes, leurs annonces, et les instances de groupe ouvertes en ce moment
 - 🎵 **Vidéos** — toutes les vidéos et musiques jouées, avec compteur
 - 📊 **Statistiques** — heures de jeu, mondes favoris, personnes les plus vues, avatars populaires
 - 💾 **Historique permanent** — VRChat efface ses vieux logs, VRCLogs les garde

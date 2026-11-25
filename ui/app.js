@@ -796,11 +796,12 @@ function setMeta(key, patch) {
 function renderGroups() {
   const { list, links } = M.groups;
   $('view-groups').innerHTML = `
-    <header class="bar"><h1>Groupes d'amis détectés</h1></header>
-    <p class="muted">Des joueurs qui arrivent ou repartent à moins de 20 secondes d'écart, au moins 2 fois, sont probablement venus ensemble.</p>
+    <header class="bar"><h1>🫂 Cercles d'amis détectés</h1></header>
+    <p class="muted">Des joueurs qui arrivent ou repartent à moins de 20 secondes d'écart, au moins 2 fois, sont probablement venus ensemble : ils forment un cercle d'amis.
+      <br>(Pour tes vrais groupes VRChat, va dans 🏛️ Groupes VRChat.)</p>
     ${list.length ? list.map((g, i) => `
       <div class="card group">
-        <div class="title">Groupe ${i + 1} <span class="badge">${g.members.length} personnes</span></div>
+        <div class="title">Cercle ${i + 1} <span class="badge">${g.members.length} personnes</span></div>
         <div class="tags">${g.members
           .sort((a, b) => links.get(b).length - links.get(a).length)
           .map(k => `<a class="tag link" data-player="${esc(k)}">${dot(k, M.players.get(k)?.name || k)}${esc(M.players.get(k)?.name || k)}</a>`).join('')}</div>
@@ -1428,7 +1429,7 @@ function showModal(html) { $('modalBody').innerHTML = html; $('modal').classList
 function hideModal() { $('modal').classList.add('hidden'); }
 
 const RENDERERS = { live: renderLive, friends: renderFriends, brain: () => renderBrain(),
-  steam: () => renderSteam(), news: () => renderNews(), shop: () => renderShop(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
+  steam: () => renderSteam(), news: () => renderNews(), shop: () => renderShop(), vgroups: () => renderVGroups(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
   people: renderPeople, groups: renderGroups, videos: renderVideos, stats: renderStats };
 function render() { RENDERERS[currentView](); initCharts(); }
 function goTo(view) {
@@ -1539,7 +1540,7 @@ applySettings();
     if (!$('modal').classList.contains('hidden')) return;
     // Les pages Amis et Avatars ne dépendent pas des logs : on ne les redessine pas
     // (sinon ce que tu es en train de taper serait effacé à chaque seconde)
-    if (['friends', 'avatars', 'brain', 'steam', 'news', 'shop'].includes(currentView)) return;
+    if (['friends', 'avatars', 'brain', 'steam', 'news', 'shop', 'vgroups'].includes(currentView)) return;
     // Pendant que tu explores le graphique (souris dessus ou curseur en main), on attend
     if (document.querySelector('.ichart:hover') || document.activeElement?.closest?.('.ichart')) return;
     if (currentView !== 'feed' || document.querySelector('main').scrollTop < 50) render();
