@@ -35,6 +35,10 @@ let open = null; // une seule fenêtre à la fois
 function steamLogin(parent) {
   if (open) { open.focus(); return Promise.resolve({ cancelled: true, busy: true }); }
   const ses = session.fromPartition('vrclogs-steam-login'); // sans "persist:" : tout est en mémoire seulement
+  // Cette fenêtre n'a droit à RIEN : ni caméra, ni micro, ni notifications, ni téléchargement
+  ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+  ses.setPermissionCheckHandler(() => false);
+  ses.on('will-download', e => e.preventDefault());
   ses.setUserAgent(ses.getUserAgent().replace(/\s(Electron|vrclogs)\/\S+/gi, '')); // un navigateur "normal" pour Steam
   const w = new BrowserWindow({
     parent, width: 980, height: 780, title: 'Steam', autoHideMenuBar: true, backgroundColor: '#171a21',

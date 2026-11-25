@@ -17,7 +17,10 @@ const { steamLogin } = require('./steam-login');
 //  SÉCURITÉ : on n'accepte les demandes (IPC) QUE de notre propre interface
 //  (les fichiers de l'app, en file://). Une page web ne peut rien demander.
 // ---------------------------------------------------------------------
-const isOwnPage = e => (e.senderFrame?.url || '').startsWith('file://');
+// Notre interface = les fichiers du dossier "ui" de l'app (pas n'importe quel fichier du PC)
+const UI_URL = require('url').pathToFileURL(path.join(__dirname, 'ui')).href + '/';
+const isOwnUrl = url => String(url || '').startsWith(UI_URL);
+const isOwnPage = e => isOwnUrl(e.senderFrame?.url);
 const _handle = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (channel, fn) => _handle(channel, (e, ...args) => {
   if (!isOwnPage(e)) throw new Error('Demande refusée');
@@ -25,6 +28,33 @@ ipcMain.handle = (channel, fn) => _handle(channel, (e, ...args) => {
 });
 // Les modes test et diagnostic n'existent QUE dans la version de développement
 const DEV = !app.isPackaged;
+const TEST_MODE = DEV && !!(process.env.VRCLOGS_SHOT || process.env.VRCLOGS_EVAL);
+
+// ---------------------------------------------------------------------
+//  SÉCURITÉ : règles pour TOUTES les fenêtres (l'app et la fenêtre de connexion Steam)
+// ---------------------------------------------------------------------
+app.enableSandbox(); // chaque page tourne dans un bac à sable, sans accès au PC
+app.on('web-contents-created', (_e, wc) => {
+  wc.on('will-attach-webview', e => e.preventDefault()); // pas de page cachée dans une page
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));   // pas de fenêtre surprise (pop-up)
+});
+// Permissions : notre interface a seulement droit aux notifications et au presse-papiers (palette).
+// Tout le reste (caméra, micro, position, écran…) est refusé, pour tout le monde.
+const ALLOWED_PERMISSIONS = new Set(['notifications', 'clipboard-read', 'clipboard-sanitized-write']);
+function lockSession(ses) {
+  ses.setPermissionRequestHandler((wc, perm, cb) => cb(ALLOWED_PERMISSIONS.has(perm) && isOwnUrl(wc?.getURL())));
+  ses.setPermissionCheckHandler((_wc, perm, origin) => ALLOWED_PERMISSIONS.has(perm) && String(origin || '').startsWith('file://'));
+  ses.on('will-download', e => e.preventDefault()); // aucun téléchargement automatique
+}
+// Une seule copie de VRCLogs à la fois (deux copies se battraient pour les fichiers et le statut Discord)
+const GOT_LOCK = TEST_MODE || app.requestSingleInstanceLock();
+if (!GOT_LOCK) app.quit();
+app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+
+// Petits contrôles des données reçues de l'interface
+const ID = { steam: /^\d{17}$/, world: /^wrld_[\w-]{1,80}$/, group: /^grp_[\w-]{1,80}$/, store: /^esto_[\w-]{1,80}$/ };
+const checkId = (v, re) => { if (typeof v !== 'string' || !re.test(v)) throw new Error('Identifiant invalide'); return v; };
+const str = (v, max = 200) => (typeof v === 'string' && v.length <= max ? v : '');
 
 // "vrcimg://" = notre propre adresse pour afficher les images VRChat (avatars, mondes).
 // Elles passent par main.js, qui les télécharge proprement et les garde en cache.
@@ -239,7 +269,7 @@ ipcMain.handle('steam:local', () => steam.local());
 ipcMain.handle('steam:hasKey', () => steam.hasKey());
 ipcMain.handle('steam:setKey', safe(async (_e, { key, steamId }) => { await steam.setKey(key, steamId); return { ok: true }; }));
 ipcMain.handle('steam:clearKey', () => steam.clearKey());
-ipcMain.handle('steam:localFriends', (_e, steamId) => steam.localFriends(steamId));
+ipcMain.handle('steam:localFriends', (_e, steamId) => (ID.steam.test(steamId) ? steam.localFriends(steamId) : []));
 // "Coller ma clé" : on lit le presse-papiers ICI (la clé ne passe jamais par l'interface)
 ipcMain.handle('steam:pasteKey', safe(async (_e, steamId) => {
   const m = /\b[0-9A-F]{32}\b/i.exec(clipboard.readText() || '');
@@ -262,10 +292,10 @@ ipcMain.handle('steam:time', safe((_e, steamId) => steam.vrchatTime(steamId)));
 ipcMain.handle('steam:friends', safe((_e, { steamId, force }) =>
   steam.friends(steamId, force, (done, total) => win?.webContents.send('steam:progress', { done, total }))));
 ipcMain.handle('news:get', safe((_e, force) => getNews(force)));
-ipcMain.handle('vrc:store', safe((_e, storeId) => vrc.store(storeId)));
+ipcMain.handle('vrc:store', safe((_e, storeId) => vrc.store(checkId(storeId, ID.store))));
 ipcMain.handle('vrc:spotlight', safe(() => vrc.spotlight()));
-ipcMain.handle('vrc:worldBrief', safe((_e, id) => vrc.world(id)));
-ipcMain.handle('vrc:groupBrief', safe((_e, id) => vrc.group(id)));
+ipcMain.handle('vrc:worldBrief', safe((_e, id) => vrc.world(checkId(id, ID.world))));
+ipcMain.handle('vrc:groupBrief', safe((_e, id) => vrc.group(checkId(id, ID.group))));
 ipcMain.handle('vrc:myGroups', safe(() => vrc.myGroups()));
 ipcMain.handle('vrc:groupInstances', safe(() => vrc.groupInstances()));
 ipcMain.handle('vrc:groupDetails', safe((_e, id) => vrc.groupDetails(id)));
@@ -275,17 +305,18 @@ const presence = new DiscordPresence(st => win?.webContents.send('discord:state'
 let webhook = null;
 ipcMain.handle('discord:setClient', safe((_e, id) => presence.setClient(id)));
 ipcMain.handle('discord:state', () => presence.state());
-ipcMain.handle('discord:activity', (_e, a) => presence.setActivity(a));
+ipcMain.handle('discord:activity', (_e, a) => presence.setActivity(a && typeof a === 'object' ? a : null));
 ipcMain.handle('discord:hasWebhook', () => webhook.has());
-ipcMain.handle('discord:setWebhook', safe((_e, url) => webhook.set(url)));
+ipcMain.handle('discord:setWebhook', safe((_e, url) => webhook.set(str(url, 300))));
 ipcMain.handle('discord:clearWebhook', () => webhook.clear());
-ipcMain.handle('discord:post', (_e, msg) => webhook.post(msg || {}));
+ipcMain.handle('discord:post', (_e, msg) => webhook.post(msg && typeof msg === 'object' ? { title: str(msg.title, 300), text: str(msg.text, 2000), color: Number.isInteger(msg.color) ? msg.color : undefined } : {}));
 
 // Titre et image d'une vidéo jouée dans un monde (YouTube, via sa page publique "oEmbed", sans clé)
 const MEDIA = new Map();
 ipcMain.handle('media:info', async (_e, url) => {
   let u;
-  try { u = new URL(String(url)); } catch { return null; }
+  try { u = new URL(str(url, 2000)); } catch { return null; }
+  if (!/^https?:$/.test(u.protocol)) return null;
   const host = u.hostname.replace(/^www\.|^m\./, '');
   if (MEDIA.has(u.href)) return MEDIA.get(u.href);
   let info = { title: null, image: null, music: /music\.youtube\.com|soundcloud\.com|spotify\.com/.test(host), host };
@@ -295,14 +326,15 @@ ipcMain.handle('media:info', async (_e, url) => {
       if (res.ok) { const j = await res.json(); info.title = j.title || null; info.image = /^https:\/\//.test(j.thumbnail_url || '') ? j.thumbnail_url : null; }
     } catch {}
   }
+  if (MEDIA.size > 300) MEDIA.clear(); // on ne garde pas une liste infinie en mémoire
   MEDIA.set(u.href, info);
   return info;
 });
 
 // ---------- Chatbox VRChat (OSC) ----------
 const chatbox = new Chatbox();
-ipcMain.handle('chatbox:send', (_e, { text, sound }) => chatbox.send(text, sound));
-ipcMain.handle('chatbox:typing', (_e, on) => chatbox.typing(on));
+ipcMain.handle('chatbox:send', (_e, m) => chatbox.send(str(m?.text, 2000), m?.sound === true));
+ipcMain.handle('chatbox:typing', (_e, on) => chatbox.typing(on === true));
 ipcMain.handle('chatbox:clear', () => chatbox.clear());
 ipcMain.handle('chatbox:state', () => chatbox.state());
 
@@ -442,8 +474,9 @@ function createWindow() {
   });
 
   // Affiche les erreurs de l'interface dans le terminal (utile pour corriger les bugs)
-  win.webContents.on('console-message', (_e, level, message, line, source) => {
-    if (level >= 2) console.log(`[UI] ${message} (${path.basename(source)}:${line})`);
+  // (les nouvelles versions d'Electron donnent tout dans "e" : e.level = 'warning' / 'error', e.message…)
+  win.webContents.on('console-message', e => {
+    if (e.level === 'warning' || e.level === 'error') console.log(`[UI] ${e.message} (${path.basename(e.sourceId || '')}:${e.lineNumber})`);
   });
 
   // Mode diagnostic : VRCLOGS_EVAL="code" → exécute ce code dans l'interface, affiche le résultat, quitte
@@ -495,7 +528,7 @@ function createWindow() {
         ['lang-back-after', `new Promise(r => setTimeout(r, 5000)).then(() => document.documentElement.lang)`],
         ['update', `openSettings('update'); checkUpdate(true).then(() => new Promise(r => setTimeout(r, 500)))`],
         ['update-new', `UPDATE.result = { current: '0.3.0', latest: '0.4.0', newer: true, page: 'https://github.com/TheGoddessQc/VRCLogs/releases', download: 'https://github.com/TheGoddessQc/VRCLogs/releases', size: 87677654, date: new Date().toISOString(), notes: '## Test\\n\\n**Nouveautés**\\n- Une fonction\\n- Une autre\\n\\n> Note' }; $('openSettings').classList.add('has-update'); openSettings('update')`],
-        ['theme-neon', `document.querySelector('[data-theme-pick="neon"]').click()`],
+        ['theme-neon', `openSettings('look'); document.querySelector('[data-theme-pick="neon"]').click()`],
         ['theme-clair', `document.querySelector('[data-theme-pick="clair"]').click(); hideModal(); goTo('live')`],
         ['theme-random', `openSettings('look'); document.getElementById('palRandom').click()`],
         ['theme-back', `SETTINGS.theme = 'goddess'; applySettings(); hideModal()`],
@@ -567,6 +600,8 @@ ipcMain.handle('export-csv', async (_e, text) => {
 });
 
 app.whenReady().then(() => {
+  if (!GOT_LOCK) return; // une autre copie est déjà ouverte : on lui laisse la place
+  lockSession(require('electron').session.defaultSession);
   initialLoad();
   startVRChat();
   createWindow();

@@ -30,6 +30,11 @@
 
 ## Protections de l'application
 
+- VRCLogs utilise une version **récente d'Electron** (le moteur de l'app, basé sur Chrome), avec les correctifs de sécurité à jour.
+- Toutes les fenêtres refusent la caméra, le micro, la position, les pop-ups, les pages intégrées et les téléchargements automatiques. L'interface a seulement droit aux notifications et au presse-papiers.
+- Les données reçues par la partie cachée de l'app (identifiants de mondes, de groupes, de comptes Steam, adresses) sont **vérifiées** avant d'être utilisées.
+- Une seule copie de VRCLogs peut tourner à la fois.
+
 - L'interface tourne dans un **bac à sable** isolé, sans accès à tes fichiers ni à tes programmes.
 - Tout texte venant d'Internet (pseudos, bios, noms de mondes…) est **neutralisé** avant d'être affiché.
 - Une règle de sécurité (CSP) **bloque tout script** qui ne fait pas partie de l'application.

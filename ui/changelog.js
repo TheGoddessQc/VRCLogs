@@ -10,6 +10,7 @@ const CHANGELOG = [
   {
     version: '0.5.0', date: '2026-11-25',
     fr: [
+      '🔒 Sécurité renforcée : moteur Electron à jour (failles corrigées), permissions bloquées, données vérifiées, une seule copie de l\'app à la fois',
       '💬 Statut Discord automatique : ton monde VRChat s\'affiche sur ton profil Discord (« Joue à »), sans rien configurer',
       '🔌 Paramètres → Intégrations : options du statut Discord comme VRCX (Regarde/Écoute pour les vidéos, VR ou bureau, bouton Rejoindre, images…)',
       '🔔 Alertes VRCLogs dans un salon de ton serveur Discord (favoris, amis, pannes de VRChat, nouveau monde)',
@@ -17,6 +18,7 @@ const CHANGELOG = [
       "🎮 Steam plus simple : tes contacts s'affichent sans clé, et le bouton « Se connecter avec Steam » récupère la clé tout seul",
     ],
     en: [
+      '🔒 Stronger security: up-to-date Electron engine (vulnerabilities fixed), permissions blocked, data checked, only one copy of the app at a time',
       '💬 Automatic Discord status: your VRChat world shows on your Discord profile ("Playing"), nothing to set up',
       '🔌 Settings → Integrations: Discord status options like VRCX (Watching/Listening for videos, VR or desktop, Join button, images…)',
       '🔔 VRCLogs alerts in a channel of your Discord server (favorites, friends, VRChat outages, new world)',
