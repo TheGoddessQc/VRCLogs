@@ -10,16 +10,16 @@ const CHANGELOG = [
   {
     version: '0.5.0', date: '2026-11-25',
     fr: [
-      '💬 Nouvelle page Discord : ton monde VRChat affiché sur ton profil Discord (statut « Joue à »)',
+      '💬 Statut Discord automatique : ton monde VRChat s\'affiche sur ton profil Discord (« Joue à »), sans rien configurer',
       '🔔 Alertes VRCLogs dans un salon de ton serveur Discord (favoris, amis, pannes de VRChat, nouveau monde)',
       '💭 Nouvelle page Chatbox : écris au-dessus de ta tête dans VRChat, avec messages automatiques et variables (heure, monde, joueurs…)',
-      "🎮 Steam plus simple : tes contacts Steam s'affichent sans clé, et la clé s'ajoute en 2 clics (📋 Coller ma clé)",
+      "🎮 Steam plus simple : tes contacts s'affichent sans clé, et le bouton « Se connecter avec Steam » récupère la clé tout seul",
     ],
     en: [
-      '💬 New Discord page: your VRChat world shown on your Discord profile ("Playing" status)',
+      '💬 Automatic Discord status: your VRChat world shows on your Discord profile ("Playing"), nothing to set up',
       '🔔 VRCLogs alerts in a channel of your Discord server (favorites, friends, VRChat outages, new world)',
       '💭 New Chatbox page: write above your head in VRChat, with automatic messages and variables (time, world, players…)',
-      '🎮 Easier Steam: your Steam contacts show up without a key, and the key is added in 2 clicks (📋 Paste my key)',
+      '🎮 Easier Steam: your contacts show up without a key, and the "Sign in with Steam" button gets the key by itself',
     ],
   },
   {

@@ -76,17 +76,23 @@ async function renderSteam() {
 function steamKeyHtml(acc) {
   return `<div class="card steamkey">
     <h3>⭐ Bonus : qui joue à VRChat parmi tes amis, et combien d'heures</h3>
-    <p class="muted">Pour ça, Steam demande une <b>clé API</b> (gratuite, créée par toi). Deux étapes :</p>
-    <div class="keysteps">
-      <div class="keystep"><b>1</b>
-        <div><button class="primary" data-url="https://steamcommunity.com/dev/apikey">🌐 Ouvrir la page Steam</button>
-        <p class="muted small">Connecte-toi, écris <code>localhost</code> dans « Domain Name », coche la case, clique <b>Register</b>, puis <b>copie la clé</b> (Ctrl+C).</p></div></div>
-      <div class="keystep"><b>2</b>
-        <div><button class="primary" id="steamPaste">📋 Coller ma clé</button>
-        <p class="muted small">VRCLogs lit la clé copiée, la vérifie, l'enregistre, puis vide le presse-papiers.</p></div></div>
-    </div>
+    <button class="steambtn" id="steamLogin">${STEAM.loggingIn ? '⏳ Connexion à Steam en cours…' : '<b>STEAM</b> Se connecter avec Steam'}</button>
+    <ol class="cbsteps small">
+      <li>La page officielle de Steam s'ouvre : connecte-toi (mot de passe ou <b>QR code</b> avec l'app Steam mobile).</li>
+      <li>Si tu n'as pas encore de clé : coche la case des conditions, clique <b>Register</b>, et confirme dans l'app Steam mobile.</li>
+      <li>VRCLogs récupère la clé tout seul et ferme la fenêtre. 🎉</li>
+    </ol>
+    <p class="muted small">🔒 Ton mot de passe est tapé <b>chez Steam</b>, jamais dans VRCLogs. Après, VRCLogs oublie ta connexion Steam : il garde seulement la clé.</p>
     ${STEAM.keyError ? `<p class="t-leave">⚠️ ${esc(STEAM.keyError)}</p>` : ''}
-    <details class="small"><summary>Écrire la clé à la main</summary>
+    <details class="small"><summary>Autres méthodes (copier-coller la clé)</summary>
+      <div class="keysteps">
+        <div class="keystep"><b>1</b>
+          <div><button class="ghost" data-url="https://steamcommunity.com/dev/apikey">🌐 Ouvrir la page Steam</button>
+          <p class="muted small">Connecte-toi, écris <code>localhost</code> dans « Domain Name », coche la case, clique <b>Register</b>, puis <b>copie la clé</b> (Ctrl+C).</p></div></div>
+        <div class="keystep"><b>2</b>
+          <div><button class="ghost" id="steamPaste">📋 Coller ma clé</button>
+          <p class="muted small">VRCLogs lit la clé copiée, la vérifie, l'enregistre, puis vide le presse-papiers.</p></div></div>
+      </div>
       <form id="steamKeyForm" class="keyform">
         <input id="steamKey" type="password" autocomplete="off" placeholder="Ta clé API Steam" required>
         <button class="primary">Enregistrer</button>
@@ -175,6 +181,21 @@ function bindSteam(acc) {
     $('steamKey').value = ''; // on efface la clé de l'écran
     if (r.error) { STEAM.keyError = r.error; }
     else { STEAM.keyError = ''; STEAM.hasKey = true; toast('✅ Clé Steam enregistrée'); }
+    renderSteam();
+  };
+  if ($('steamLogin')) $('steamLogin').onclick = async () => {
+    if (STEAM.loggingIn) return;
+    STEAM.loggingIn = true; STEAM.keyError = ''; renderSteam();
+    const r = await window.api.steam.login();
+    STEAM.loggingIn = false;
+    if (r.error) STEAM.keyError = r.error;
+    else if (r.ok) {
+      STEAM.hasKey = true;
+      // on affiche le compte avec lequel tu viens de te connecter
+      if (r.steamId && STEAM.local.accounts.some(a => a.steamId === r.steamId)) { SETTINGS.steamAccount = r.steamId; save('settings', SETTINGS); }
+      STEAM.time = null; STEAM.friends = null;
+      toast('✅ Connecté(e) à Steam : clé enregistrée');
+    }
     renderSteam();
   };
   if ($('steamPaste')) $('steamPaste').onclick = async e => {

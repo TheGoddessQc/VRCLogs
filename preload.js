@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
     hasKey: () => ipcRenderer.invoke('steam:hasKey'),
     setKey: (key, steamId) => ipcRenderer.invoke('steam:setKey', { key, steamId }),
     clearKey: () => ipcRenderer.invoke('steam:clearKey'),
+    login: () => ipcRenderer.invoke('steam:login'),
     pasteKey: steamId => ipcRenderer.invoke('steam:pasteKey', steamId),
     localFriends: steamId => ipcRenderer.invoke('steam:localFriends', steamId),
     time: steamId => ipcRenderer.invoke('steam:time', steamId),

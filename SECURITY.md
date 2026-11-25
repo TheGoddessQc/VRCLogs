@@ -16,6 +16,7 @@
 
 - Gardée **chiffrée par Windows**, envoyée **uniquement à Steam** (`api.steampowered.com`).
 - Tu peux la retirer à tout moment (🎮 Steam → 🗑️ Retirer ma clé).
+- **« Se connecter avec Steam »** ouvre la page officielle de Steam dans une fenêtre qui ne peut aller **que** sur les sites de Steam. Ton mot de passe est tapé chez Steam, jamais dans VRCLogs. VRCLogs lit seulement la clé affichée, puis **efface** la connexion Steam de cette fenêtre (cookies, cache).
 
 ## Discord (optionnel)
 

@@ -25,6 +25,7 @@
       "news.js",
       "discord.js",
       "chatbox.js",
+      "steam-login.js",
       "ui/**/*",
       "build/icon.png"
     ],

@@ -10,7 +10,7 @@ const VRCLOGS_APP_ID = '';
 
 const DISCORD = Object.assign({
   clientId: '',          // (avancé) Application ID personnel, à la place de celui de VRCLogs
-  presence: false,       // afficher le statut (tu l'actives toi-même, comme dans VRCX)
+  presence: true,        // statut affiché AUTOMATIQUEMENT (on peut le couper avec la case)
   showWorld: 'notinvite',// always | notinvite | never
   showPlayers: true,
   showImage: true,

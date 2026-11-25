@@ -11,6 +11,7 @@ const { Steam } = require('./steam');
 const { getNews } = require('./news');
 const { DiscordPresence, DiscordWebhook } = require('./discord');
 const { Chatbox } = require('./chatbox');
+const { steamLogin } = require('./steam-login');
 
 // ---------------------------------------------------------------------
 //  SÉCURITÉ : on n'accepte les demandes (IPC) QUE de notre propre interface
@@ -246,6 +247,16 @@ ipcMain.handle('steam:pasteKey', safe(async (_e, steamId) => {
   await steam.setKey(m[0], steamId);
   if (clipboard.readText().trim() === m[0]) clipboard.clear(); // on ne laisse pas traîner la clé
   return { ok: true };
+}));
+// "Se connecter avec Steam" : fenêtre officielle de Steam, puis la clé est lue toute seule
+ipcMain.handle('steam:login', safe(async () => {
+  const r = await steamLogin(win);
+  if (r.error) throw new Error(r.error);
+  if (!r.key) return { cancelled: true };
+  const accounts = steam.local().accounts;
+  const steamId = r.steamId || accounts.find(a => a.mostRecent)?.steamId || accounts[0]?.steamId;
+  await steam.setKey(r.key, steamId);
+  return { ok: true, steamId };
 }));
 ipcMain.handle('steam:time', safe((_e, steamId) => steam.vrchatTime(steamId)));
 ipcMain.handle('steam:friends', safe((_e, { steamId, force }) =>
