@@ -19,7 +19,9 @@ Qui était là, combien de temps, dans quel monde, avec quel avatar — tout, en
 - 💜 **Amis** *(compte VRChat, optionnel)* — qui est en ligne, dans quel monde, tes groupes de favoris, bouton « Rejoindre »
 - 🧍 **Avatars** — regarde l'avatar actuel de tes amis en grand et la galerie de tes propres avatars
 - 🧠 **Cerveau d'amis** — une carte interactive de tes relations
-- 🎮 **Steam** — tes heures exactes sur VRChat et tes amis Steam qui y jouent
+- 🎮 **Steam** — tes heures exactes sur VRChat, tes contacts Steam (sans clé), et tes amis Steam qui y jouent
+- 💬 **Discord** *(optionnel)* — ton monde VRChat sur ton profil Discord, et les alertes de VRCLogs dans un salon de ton serveur
+- 💭 **Chatbox** — écris au-dessus de ta tête dans VRChat (messages automatiques, heure, monde, joueurs…) grâce à l'OSC officiel
 - 📰 **Nouveautés** — les mises à jour officielles de VRChat et les boutiques des mondes visités (affichage seulement)
 - 📈 **Graphique d'instance** — le nombre de joueurs au fil du temps ; survole-le pour voir qui était là à chaque minute
 - 📅 **Résumé du jour** — temps de jeu, mondes, nouvelles rencontres, moment fort de la journée
@@ -65,6 +67,8 @@ traduis la colonne de droite, et propose-la dans une *Pull Request* !
   [avtrDB](https://avtrdb.com). Désactivable dans *Paramètres → Données*.
 - **Steam** : les heures de jeu sont lues dans les fichiers de Steam sur ton PC. Pour les amis Steam, tu peux ajouter
   ta propre clé API Steam (optionnelle) : elle est **chiffrée par Windows** et envoyée **uniquement à Steam**.
+- **Discord** *(optionnel)* : le statut passe par l'app Discord de ton PC ; l'adresse du webhook est **chiffrée par Windows** et envoyée **uniquement à Discord**. VRCLogs ne lit jamais tes amis ni tes messages Discord.
+- **Chatbox** : le texte est envoyé à VRChat **sur ton PC** (OSC, `127.0.0.1`), rien ne passe par Internet.
 - Les boutiques sont en **affichage seulement** : aucun achat n'est possible depuis VRCLogs.
 - **Statut VRChat** : VRCLogs lit la page publique status.vrchat.com toutes les 5 minutes (rien n'est envoyé).
 - **Mises à jour** : VRCLogs regarde seulement la dernière version publiée sur GitHub (rien n'est envoyé).

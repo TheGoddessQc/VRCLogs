@@ -103,6 +103,30 @@ class Steam {
     return { found: accounts.length > 0, accounts };
   }
 
+  // Tes contacts Steam SANS clé : Steam garde une copie (nom + image) dans localconfig.vdf.
+  // C'est une "mémoire" de Steam : elle peut contenir d'anciens amis ou des contacts récents.
+  localFriends(steamId) {
+    try {
+      const accountId = (BigInt(steamId) - STEAM64_BASE).toString();
+      const cfg = parseVDF(fs.readFileSync(path.join(steamPath(), 'userdata', accountId, 'config', 'localconfig.vdf'), 'utf8'));
+      const fr = get(cfg, 'UserLocalConfigStore', 'friends') || {};
+      const out = [];
+      for (const [id, f] of Object.entries(fr)) {
+        if (!/^\d+$/.test(id) || id === accountId || typeof f !== 'object' || !f.name) continue;
+        const id64 = (BigInt(id) + STEAM64_BASE).toString();
+        out.push({
+          steamId: id64,
+          name: f.name,
+          // l'image est désignée par une "empreinte" de 40 caractères
+          avatar: /^[0-9a-f]{40}$/i.test(f.avatar || '') && !/^0+$/.test(f.avatar) ? `https://avatars.steamstatic.com/${f.avatar}_full.jpg` : null,
+          url: `https://steamcommunity.com/profiles/${id64}`,
+        });
+      }
+      out.sort((a, b) => a.name.localeCompare(b.name));
+      return out;
+    } catch { return []; }
+  }
+
   // ---------- 2. Clé API (chiffrée) ----------
   getKey() {
     try { return safeStorage.decryptString(fs.readFileSync(this.keyFile)); } catch { return null; }

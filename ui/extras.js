@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------
 //  🎮 STEAM : heures de jeu + amis Steam qui jouent à VRChat
 // ---------------------------------------------------------------------
-const STEAM = { local: null, hasKey: false, time: null, friends: null, total: 0, progress: null, error: '', keyError: '', loading: false };
+const STEAM = { local: null, contacts: null, contactsFor: null, contactQ: '', hasKey: false, time: null, friends: null, total: 0, progress: null, error: '', keyError: '', loading: false };
 
 async function renderSteam() {
   const el = $('view-steam');
@@ -47,8 +47,7 @@ async function renderSteam() {
     </div>
     <p class="muted small">Soit environ <b>${(minutes / 60 / 24).toFixed(1)} jours</b> complets passés dans VRChat 😮</p>
 
-    <h2>👥 Tes amis Steam qui jouent à VRChat</h2>
-    ${STEAM.hasKey ? steamFriendsHtml() : steamKeyHtml(acc)}`;
+    ${STEAM.hasKey ? `<h2>👥 Tes amis Steam qui jouent à VRChat</h2>${steamFriendsHtml()}` : steamKeyHtml(acc) + steamContactsHtml()}`;
 
   if ($('steamAccount')) $('steamAccount').onchange = e => {
     SETTINGS.steamAccount = e.target.value; save('settings', SETTINGS);
@@ -56,6 +55,15 @@ async function renderSteam() {
   };
   bindSteam(acc);
   bindOldToggle();
+  // Sans clé : les contacts gardés par Steam sur ton PC
+  if (!STEAM.hasKey && STEAM.contactsFor !== acc.steamId) {
+    STEAM.contactsFor = acc.steamId;
+    window.api.steam.localFriends(acc.steamId).then(r => { STEAM.contacts = r; if (currentView === 'steam') renderSteam(); });
+  }
+  if ($('steamContactQ')) $('steamContactQ').oninput = e => {
+    STEAM.contactQ = e.target.value;
+    $('steamContacts').innerHTML = steamContactCards();
+  };
   // Avec une clé : heures exactes + amis (une seule fois, puis bouton 🔄)
   if (STEAM.hasKey && !STEAM.loading) {
     if (!STEAM.time || STEAM.time.steamId !== acc.steamId) {
@@ -67,18 +75,23 @@ async function renderSteam() {
 
 function steamKeyHtml(acc) {
   return `<div class="card steamkey">
-    <p>Pour voir tes amis Steam, il faut une <b>clé API Steam</b>. Elle est gratuite et c'est <b>toi</b> qui la crées :</p>
-    <ol>
-      <li>Ouvre <a class="link" data-url="https://steamcommunity.com/dev/apikey">steamcommunity.com/dev/apikey</a> et connecte-toi à Steam.</li>
-      <li>Dans <b>« Domain Name »</b>, écris <code>localhost</code> (c'est juste un nom, il n'est pas utilisé).</li>
-      <li>Accepte les conditions, clique <b>Register</b>, puis copie la clé (32 caractères).</li>
-      <li>Colle-la ici :</li>
-    </ol>
-    <form id="steamKeyForm" class="keyform">
-      <input id="steamKey" type="password" autocomplete="off" placeholder="Ta clé API Steam" required>
-      <button class="primary">Enregistrer</button>
-    </form>
+    <h3>⭐ Bonus : qui joue à VRChat parmi tes amis, et combien d'heures</h3>
+    <p class="muted">Pour ça, Steam demande une <b>clé API</b> (gratuite, créée par toi). Deux étapes :</p>
+    <div class="keysteps">
+      <div class="keystep"><b>1</b>
+        <div><button class="primary" data-url="https://steamcommunity.com/dev/apikey">🌐 Ouvrir la page Steam</button>
+        <p class="muted small">Connecte-toi, écris <code>localhost</code> dans « Domain Name », coche la case, clique <b>Register</b>, puis <b>copie la clé</b> (Ctrl+C).</p></div></div>
+      <div class="keystep"><b>2</b>
+        <div><button class="primary" id="steamPaste">📋 Coller ma clé</button>
+        <p class="muted small">VRCLogs lit la clé copiée, la vérifie, l'enregistre, puis vide le presse-papiers.</p></div></div>
+    </div>
     ${STEAM.keyError ? `<p class="t-leave">⚠️ ${esc(STEAM.keyError)}</p>` : ''}
+    <details class="small"><summary>Écrire la clé à la main</summary>
+      <form id="steamKeyForm" class="keyform">
+        <input id="steamKey" type="password" autocomplete="off" placeholder="Ta clé API Steam" required>
+        <button class="primary">Enregistrer</button>
+      </form>
+    </details>
     <ul class="privacy">
       <li>🔒 La clé est gardée <b>chiffrée par Windows</b> et envoyée <b>uniquement à Steam</b>.</li>
       <li>🤫 Ne la donne jamais à personne : elle est liée à ton compte Steam.</li>
@@ -86,6 +99,25 @@ function steamKeyHtml(acc) {
       <li>👀 On ne voit les heures que des amis dont le profil Steam est public.</li>
     </ul>
   </div>`;
+}
+
+// Contacts Steam lus sur ton PC (sans clé)
+function steamContactsHtml() {
+  if (!STEAM.contacts) return '<h2>👥 Tes contacts Steam</h2><div class="empty">Lecture…</div>';
+  if (!STEAM.contacts.length) return '';
+  return `<h2>👥 Tes contacts Steam <span class="muted small">(${STEAM.contacts.length} · lus sur ton PC, sans clé)</span></h2>
+    <p class="muted small">Steam garde sur ton PC le nom et l'image des personnes que tu connais (amis, et parfois d'anciens contacts). Clique pour ouvrir un profil.</p>
+    <div class="bar small-bar"><input id="steamContactQ" type="search" placeholder="Rechercher un contact…" value="${esc(STEAM.contactQ)}"></div>
+    <div class="fgrid" id="steamContacts">${steamContactCards()}</div>`;
+}
+function steamContactCards() {
+  const q = STEAM.contactQ.trim().toLowerCase();
+  const list = STEAM.contacts.filter(f => !q || f.name.toLowerCase().includes(q));
+  return list.map(f => `
+    <div class="fcard steamf" data-url="${esc(f.url)}">
+      <div class="fimg">${dot(f.steamId, f.name, 'big')}${f.avatar ? vimg(f.avatar) : ''}</div>
+      <div class="finfo"><div class="n">${esc(f.name)}</div><div class="s muted">Profil Steam ↗</div></div>
+    </div>`).join('') || '<div class="empty">Aucun contact trouvé.</div>';
 }
 
 function steamFriendsHtml() {
@@ -145,11 +177,18 @@ function bindSteam(acc) {
     else { STEAM.keyError = ''; STEAM.hasKey = true; toast('✅ Clé Steam enregistrée'); }
     renderSteam();
   };
+  if ($('steamPaste')) $('steamPaste').onclick = async e => {
+    const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Vérification…';
+    const r = await window.api.steam.pasteKey(acc.steamId);
+    if (r.error) STEAM.keyError = r.error;
+    else { STEAM.keyError = ''; STEAM.hasKey = true; toast('✅ Clé Steam enregistrée'); }
+    renderSteam();
+  };
   if ($('steamRefresh')) $('steamRefresh').onclick = () => loadSteamFriends(acc, true);
   if ($('steamForget')) $('steamForget').onclick = async () => {
     if (!confirm(tr('Retirer ta clé API Steam de VRCLogs ?'))) return;
     await window.api.steam.clearKey();
-    Object.assign(STEAM, { hasKey: false, time: null, friends: null, error: '' });
+    Object.assign(STEAM, { hasKey: false, time: null, friends: null, error: '', contactsFor: null });
     renderSteam();
   };
 }
@@ -217,8 +256,8 @@ async function refreshStatus(notifyChange) {
     SRV.error = '';
     // Prévenir quand VRChat tombe… et quand il revient
     if (notifyChange && before && before !== r.indicator) {
-      if (r.indicator === 'none') notify('✅ VRChat fonctionne à nouveau', 'Tous les services VRChat sont opérationnels.');
-      else notify(`${SRV_LEVEL[r.indicator]?.[1] || '⚠️'} ${SRV_LEVEL[r.indicator]?.[2] || 'VRChat a des problèmes'}`, r.incidents[0]?.name || '');
+      if (r.indicator === 'none') notify('✅ VRChat fonctionne à nouveau', 'Tous les services VRChat sont opérationnels.', 'status');
+      else notify(`${SRV_LEVEL[r.indicator]?.[1] || '⚠️'} ${SRV_LEVEL[r.indicator]?.[2] || 'VRChat a des problèmes'}`, r.incidents[0]?.name || '', 'status');
     }
   }
   SRV.at = Date.now();

@@ -22,9 +22,13 @@ vrchat.js        → la CONNEXION au compte VRChat (amis, favoris, avatars, prof
 avatars.js       → savoir si un avatar est public (base avtrDB)
 steam.js         → heures de jeu (fichiers Steam) et amis Steam (clé API)
 news.js          → actualités de VRChat (via Steam)
+discord.js       → statut sur ton profil Discord + alertes dans ton serveur (webhook)
+chatbox.js       → envoie ton texte au-dessus de ta tête dans VRChat (OSC)
 ui/brain.js      → le cerveau d'amis (simulation physique)
 ui/extras.js     → pages Steam, Nouveautés et Boutique
 ui/groups.js     → page Groupes VRChat
+ui/discord.js    → page Discord
+ui/chatbox.js    → page Chatbox (variables, mode automatique)
 ui/changelog.js  → les NOTES DE VERSION (ajoute un bloc en haut à chaque nouvelle version)
 ui/i18n.js       → le TRADUCTEUR (10 langues)
 ui/lang/*.js     → une traduction par langue : "phrase en français" → "traduction"

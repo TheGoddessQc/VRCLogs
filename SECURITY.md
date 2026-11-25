@@ -17,6 +17,16 @@
 - Gardée **chiffrée par Windows**, envoyée **uniquement à Steam** (`api.steampowered.com`).
 - Tu peux la retirer à tout moment (🎮 Steam → 🗑️ Retirer ma clé).
 
+## Discord (optionnel)
+
+- **Statut** : VRCLogs parle à l'app Discord ouverte sur ton PC (tuyau local). Il a seulement besoin d'un *Application ID*, un numéro **public** qui ne donne aucun accès à ton compte.
+- **Alertes** : l'adresse du webhook est gardée **chiffrée par Windows** et envoyée **uniquement à Discord**. VRCLogs ne mentionne jamais personne.
+- VRCLogs ne lit **jamais** tes amis, messages ou serveurs Discord, et ne te demande **jamais** ton mot de passe ni ton « token » Discord (ce serait interdit par Discord).
+
+## Chatbox (OSC)
+
+- Le texte est envoyé à VRChat **sur ton propre PC** (`127.0.0.1`, port 9000), avec le système officiel OSC de VRChat. Rien ne passe par Internet.
+
 ## Protections de l'application
 
 - L'interface tourne dans un **bac à sable** isolé, sans accès à tes fichiers ni à tes programmes.
@@ -29,7 +39,7 @@
 
 - Télécharge VRCLogs **uniquement** depuis la page officielle des [Releases](https://github.com/TheGoddessQc/VRCLogs/releases).
 - Ne tape **jamais** ton mot de passe VRChat sur un site qui n'est pas `vrchat.com`.
-- Ne partage **jamais** ta clé API Steam.
+- Ne partage **jamais** ta clé API Steam ni l'adresse de ton webhook Discord.
 
 ## Signaler un problème de sécurité
 

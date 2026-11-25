@@ -936,7 +936,7 @@ function setVRC(s) {
   if (ALERTS.friendOnline && before.size) {
     for (const f of s.friends) {
       const old = before.get(f.id);
-      if (f.online && old && !old.online && isFavFriend(f.id)) notify(`💜 ${f.name} est en ligne`, friendWhere(f).replace(/<[^>]+>/g, ''));
+      if (f.online && old && !old.online && isFavFriend(f.id)) notify(`💜 ${f.name} est en ligne`, friendWhere(f).replace(/<[^>]+>/g, ''), 'friends');
     }
   }
 }
@@ -1369,7 +1369,7 @@ function openSettings(tab = settingsTab) {
       openSettings('look');
     };
   }
-  if ($('testAlert')) $('testAlert').onclick = () => notify('🔔 Test', 'Les alertes fonctionnent !');
+  if ($('testAlert')) $('testAlert').onclick = () => notify('🔔 Test', 'Les alertes fonctionnent !', 'test');
   if ($('openData')) $('openData').onclick = () => window.api.openDataFolder();
   if ($('openLogs')) $('openLogs').onclick = () => window.api.openLogFolder();
 }
@@ -1452,7 +1452,8 @@ document.addEventListener('input', e => {
 // =====================================================================
 //  ALERTES
 // =====================================================================
-function notify(title, body) {
+function notify(title, body, kind = 'alerts') {
+  if (typeof discordHook === 'function') discordHook(kind, title, body); // copie dans ton salon Discord (si activé)
   // Les notifications Windows ne sont pas dans la page : on les traduit nous-mêmes
   new Notification(tr(title), { body: tr(body), silent: ALERTS.silent });
   toast(`<b>${esc(title)}</b><br>${esc(body)}`);
@@ -1492,7 +1493,7 @@ function showModal(html) { $('modalBody').innerHTML = html; $('modal').classList
 function hideModal() { $('modal').classList.add('hidden'); }
 
 const RENDERERS = { live: renderLive, friends: renderFriends, brain: () => renderBrain(),
-  steam: () => renderSteam(), news: () => renderNews(), shop: () => renderShop(), vgroups: () => renderVGroups(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
+  steam: () => renderSteam(), discord: () => renderDiscord(), chatbox: () => renderChatbox(), news: () => renderNews(), shop: () => renderShop(), vgroups: () => renderVGroups(), avatars: () => renderAvatars(), day: renderDay, feed: renderFeed, worlds: renderWorlds,
   people: renderPeople, groups: renderGroups, videos: renderVideos, stats: renderStats };
 function render() { RENDERERS[currentView](); initCharts(); }
 function goTo(view) {
@@ -1621,7 +1622,7 @@ applySettings();
     if (!$('modal').classList.contains('hidden')) return;
     // Les pages Amis et Avatars ne dépendent pas des logs : on ne les redessine pas
     // (sinon ce que tu es en train de taper serait effacé à chaque seconde)
-    if (['friends', 'avatars', 'brain', 'steam', 'news', 'shop', 'vgroups'].includes(currentView)) return;
+    if (['friends', 'avatars', 'brain', 'steam', 'discord', 'chatbox', 'news', 'shop', 'vgroups'].includes(currentView)) return;
     // Pendant que tu explores le graphique (souris dessus ou curseur en main), on attend
     if (document.querySelector('.ichart:hover') || document.activeElement?.closest?.('.ichart')) return;
     if (currentView !== 'feed' || document.querySelector('main').scrollTop < 50) render();

@@ -1,5 +1,5 @@
 // Processus principal : lit les fichiers de log et les surveille en temps réel.
-const { app, BrowserWindow, ipcMain, shell, dialog, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, protocol, clipboard } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -9,6 +9,8 @@ const { VRChat } = require('./vrchat');
 const { AvatarSearch, UA } = require('./avatars');
 const { Steam } = require('./steam');
 const { getNews } = require('./news');
+const { DiscordPresence, DiscordWebhook } = require('./discord');
+const { Chatbox } = require('./chatbox');
 
 // ---------------------------------------------------------------------
 //  SÉCURITÉ : on n'accepte les demandes (IPC) QUE de notre propre interface
@@ -236,6 +238,15 @@ ipcMain.handle('steam:local', () => steam.local());
 ipcMain.handle('steam:hasKey', () => steam.hasKey());
 ipcMain.handle('steam:setKey', safe(async (_e, { key, steamId }) => { await steam.setKey(key, steamId); return { ok: true }; }));
 ipcMain.handle('steam:clearKey', () => steam.clearKey());
+ipcMain.handle('steam:localFriends', (_e, steamId) => steam.localFriends(steamId));
+// "Coller ma clé" : on lit le presse-papiers ICI (la clé ne passe jamais par l'interface)
+ipcMain.handle('steam:pasteKey', safe(async (_e, steamId) => {
+  const m = /\b[0-9A-F]{32}\b/i.exec(clipboard.readText() || '');
+  if (!m) throw new Error('Aucune clé Steam dans le presse-papiers. Copie la clé (32 caractères) sur la page Steam, puis réessaie.');
+  await steam.setKey(m[0], steamId);
+  if (clipboard.readText().trim() === m[0]) clipboard.clear(); // on ne laisse pas traîner la clé
+  return { ok: true };
+}));
 ipcMain.handle('steam:time', safe((_e, steamId) => steam.vrchatTime(steamId)));
 ipcMain.handle('steam:friends', safe((_e, { steamId, force }) =>
   steam.friends(steamId, force, (done, total) => win?.webContents.send('steam:progress', { done, total }))));
@@ -247,6 +258,24 @@ ipcMain.handle('vrc:groupBrief', safe((_e, id) => vrc.group(id)));
 ipcMain.handle('vrc:myGroups', safe(() => vrc.myGroups()));
 ipcMain.handle('vrc:groupInstances', safe(() => vrc.groupInstances()));
 ipcMain.handle('vrc:groupDetails', safe((_e, id) => vrc.groupDetails(id)));
+
+// ---------- Discord : statut (Rich Presence) + alertes (webhook) ----------
+const presence = new DiscordPresence(st => win?.webContents.send('discord:state', st));
+let webhook = null;
+ipcMain.handle('discord:setClient', safe((_e, id) => presence.setClient(id)));
+ipcMain.handle('discord:state', () => presence.state());
+ipcMain.handle('discord:activity', (_e, a) => presence.setActivity(a));
+ipcMain.handle('discord:hasWebhook', () => webhook.has());
+ipcMain.handle('discord:setWebhook', safe((_e, url) => webhook.set(url)));
+ipcMain.handle('discord:clearWebhook', () => webhook.clear());
+ipcMain.handle('discord:post', (_e, msg) => webhook.post(msg || {}));
+
+// ---------- Chatbox VRChat (OSC) ----------
+const chatbox = new Chatbox();
+ipcMain.handle('chatbox:send', (_e, { text, sound }) => chatbox.send(text, sound));
+ipcMain.handle('chatbox:typing', (_e, on) => chatbox.typing(on));
+ipcMain.handle('chatbox:clear', () => chatbox.clear());
+ipcMain.handle('chatbox:state', () => chatbox.state());
 
 // ---------- Statut des serveurs VRChat ----------
 // La page officielle status.vrchat.com (service "Statuspage") a une adresse publique en JSON
@@ -338,6 +367,7 @@ function startVRChat() {
   fs.mkdirSync(IMG_DIR, { recursive: true });
   avatarSearch = new AvatarSearch(DATA_DIR);
   steam = new Steam(DATA_DIR);
+  webhook = new DiscordWebhook(DATA_DIR, UA);
   // Mode test (développement seulement) : de faux amis pour vérifier l'affichage
   if (DEV && process.env.VRCLOGS_MOCK) vrc = new (require('./dev/mock-vrchat'))(allEvents);
   else vrc = new VRChat(DATA_DIR);
@@ -414,6 +444,9 @@ function createWindow() {
         ['avatar-history-done', `new Promise(r => setTimeout(r, 9000))`],
         ['avatar-public', `document.querySelector('.avrow.public')?.click()`],
         ['steam', `hideModal(); goTo('steam'); new Promise(r => setTimeout(r, 3000))`],
+        ['steam-nokey', `hideModal(); STEAM.hasKey = false; STEAM.contactsFor = null; renderSteam(); new Promise(r => setTimeout(r, 2500)).then(() => window.scrollTo(0, 0))`],
+        ['discord', `hideModal(); goTo('discord')`],
+        ['chatbox', `goTo('chatbox')`],
         ['news', `goTo('news'); new Promise(r => setTimeout(r, 4000))`],
         ['vgroups', `hideModal(); goTo('vgroups'); new Promise(r => setTimeout(r, 6000))`],
         ['vgroup', `document.querySelector('.vgcard').click(); new Promise(r => setTimeout(r, 5000))`],
@@ -474,7 +507,7 @@ const LINK_TXT = {
   ko: ['열기', '취소', '외부 링크', '이 사이트를 브라우저에서 열까요?', '이 링크는 프로필이나 그룹에서 왔습니다. vrchat.com이 아닌 사이트에 VRChat 비밀번호를 입력하지 마세요.'],
   zh: ['打开', '取消', '外部链接', '在浏览器中打开此网站？', '此链接来自个人资料或群组。切勿在 vrchat.com 以外的网站输入你的 VRChat 密码。'],
 };
-const TRUSTED = /(^|\.)(vrchat\.com|vrchat\.cloud|steampowered\.com|steamcommunity\.com|youtube\.com|youtu\.be|avtrdb\.com|github\.com)$/i;
+const TRUSTED = /(^|\.)(vrchat\.com|vrchat\.cloud|steampowered\.com|steamcommunity\.com|youtube\.com|youtu\.be|avtrdb\.com|github\.com|discord\.com)$/i;
 ipcMain.handle('open-url', async (_e, url) => {
   url = String(url);
   if (/^vrchat:\/\/launch\?/i.test(url)) return shell.openExternal(url); // "Rejoindre" dans VRChat
