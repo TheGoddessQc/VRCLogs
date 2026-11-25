@@ -37,7 +37,7 @@ function startOfDay(t) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d
 function fmtTime(t) { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function fmtDate(t) { const d = new Date(t); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; }
 function fmtDT(t) { return `${fmtDate(t)} ${fmtTime(t)}`; }
-function fmtDayLong(t) { return new Date(t).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); }
+function fmtDayLong(t) { return new Date(t).toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' }); }
 function fmtDur(ms) {
   const m = Math.max(0, Math.round((ms || 0) / 60000));
   if (m < 60) return `${m} min`;
@@ -567,7 +567,7 @@ function feedFiltered() {
 }
 function renderFeed() {
   const list = feedFiltered();
-  $('feedCount').textContent = `${list.length.toLocaleString('fr')} événement(s)`;
+  $('feedCount').textContent = `${list.length.toLocaleString(LOCALE)} événement(s)`;
   $('feedList').innerHTML = list.slice(0, feedLimit).map(rowHtml).join('') || '<div class="empty">Aucun résultat.</div>';
   $('feedMore').style.display = list.length > feedLimit ? '' : 'none';
 }
@@ -1289,6 +1289,10 @@ function openSettings(tab = settingsTab) {
   if (tab === 'look') {
     const p = currentPalette();
     body = `
+      <h2>🌍 Langue</h2>
+      <div class="langs">${LANGUAGES.map(l => `
+        <button class="langbtn ${l.code === LANG ? 'on' : ''}" data-lang="${l.code}"><span class="flag">${l.flag}</span><span class="notr">${l.name}</span></button>`).join('')}
+      </div>
       <h2>Thèmes</h2>
       <div class="themes">${THEMES.map(t => `
         <div class="theme ${SETTINGS.theme === t.id ? 'on' : ''}" data-theme-pick="${t.id}" style="background:${t.bg};color:${t.text}">
@@ -1327,7 +1331,7 @@ function openSettings(tab = settingsTab) {
   } else {
     body = `
       <p>VRChat efface ses vieux logs. VRCLogs garde une <b>copie permanente</b> de tout ton historique.</p>
-      <div class="opt"><span>${EVENTS.length.toLocaleString('fr')} événements sauvegardés depuis le ${EVENTS.length ? fmtDate(EVENTS[0].t) : '—'}</span></div>
+      <div class="opt"><span>${EVENTS.length.toLocaleString(LOCALE)} événements sauvegardés depuis le ${EVENTS.length ? fmtDate(EVENTS[0].t) : '—'}</span></div>
       <div class="opt"><span>⭐ ${FAVS.size} favori(s) · 📝 ${Object.values(META).filter(m => m.note).length} note(s) · 🏷️ ${Object.values(META).filter(m => m.tags?.length).length} joueur(s) tagués</span></div>
       <div class="opt"><span>💜 Compte VRChat : ${VRC.user ? `connecté(e) en tant que <b>${esc(VRC.user.name)}</b>` : 'non connecté'}</span>
         ${VRC.user ? '<button class="ghost" id="vrcLogout">Se déconnecter</button>' : '<button class="ghost" data-goto="friends">Se connecter</button>'}</div>
@@ -1391,7 +1395,8 @@ document.addEventListener('input', e => {
 //  ALERTES
 // =====================================================================
 function notify(title, body) {
-  new Notification(title, { body, silent: ALERTS.silent });
+  // Les notifications Windows ne sont pas dans la page : on les traduit nous-mêmes
+  new Notification(tr(title), { body: tr(body), silent: ALERTS.silent });
   toast(`<b>${esc(title)}</b><br>${esc(body)}`);
 }
 function toast(html) {
@@ -1470,6 +1475,12 @@ document.addEventListener('click', e => {
     return;
   }
   if ((el = hit('[data-stab]'))) return openSettings(el.dataset.stab);
+  if ((el = hit('[data-lang]'))) {
+    // Nouvelle langue : on l'enregistre et on recharge l'affichage
+    SETTINGS.lang = el.dataset.lang;
+    save('settings', SETTINGS);
+    return location.reload();
+  }
   if ((el = hit('[data-day]'))) { DAY = startOfDay(DAY + +el.dataset.day * 86400000 + 3600000 * 2); return renderDay(); }
   if ((el = hit('[data-gotoday]'))) { DAY = +el.dataset.gotoday; return goTo('day'); }
   if ((el = hit('[data-zoom]'))) {
@@ -1482,7 +1493,7 @@ document.addEventListener('click', e => {
   if ((el = hit('[data-ffilter]'))) { friendFilter = el.dataset.ffilter; return renderFriends(); }
   if ((el = hit('[data-goto]'))) return goTo(el.dataset.goto);
   if ((el = hit('#vrcLogout'))) {
-    if (!confirm('Se déconnecter du compte VRChat ?\nTes logs, notes et favoris restent sur ton PC.')) return;
+    if (!confirm(tr('Se déconnecter du compte VRChat ? Tes logs, notes et favoris restent sur ton PC.'))) return;
     window.api.vrc.logout();
     myAvatars = null;
     hideModal();

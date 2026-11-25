@@ -35,6 +35,14 @@ Qui était là, combien de temps, dans quel monde, avec quel avatar — tout, en
 - 💾 **Historique permanent** — VRChat efface ses vieux logs, VRCLogs les garde
 - 🎨 **Thèmes** — Goddess, Violet, Océan, Menthe + mode compact
 
+## 🌍 Langues
+
+Français · English · Español · Português · Deutsch · Italiano · Русский · 日本語 · 한국어 · 中文
+
+VRCLogs suit la langue de Windows, et tu peux la changer dans **⚙️ Paramètres → Apparence**.
+Les traductions sont dans `ui/lang/` : pour améliorer une traduction ou ajouter ta langue, copie `ui/lang/en.js`,
+traduis la colonne de droite, et propose-la dans une *Pull Request* !
+
 ## 📥 Installation
 
 1. Va dans les [Releases](../../releases/latest) et télécharge `VRCLogs-Setup-x.x.x.exe`

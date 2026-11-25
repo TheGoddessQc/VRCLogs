@@ -220,6 +220,13 @@ body.compact main { padding: 16px 20px; }
 .theme .dots { display: flex; justify-content: center; gap: 3px; margin-bottom: 6px; }
 .theme .dots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff3; }
 
+/* Choix de la langue */
+.langs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.langbtn { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer; font-size: 13px; }
+.langbtn:hover { border-color: var(--accent); }
+.langbtn.on { border-color: var(--accent); background: var(--card2); font-weight: 700; }
+.langbtn .flag { font-size: 11px; font-weight: 800; background: var(--card2); color: var(--accent); border-radius: 6px; padding: 2px 6px; letter-spacing: .5px; }
+
 /* Ma palette */
 .palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 .pcolor {

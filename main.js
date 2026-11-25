@@ -377,7 +377,10 @@ function createWindow() {
         ['friend-profile', `goTo('friends'); document.querySelector('.fcard[data-friend]').click(); new Promise(r => setTimeout(r, 4000))`],
         ['my-avatar', `hideModal(); goTo('avatars'); new Promise(r => setTimeout(r, 3000)).then(() => document.querySelector('[data-avatar]')?.click())`],
       ];
+      // VRCLOGS_SHOT_ONLY=live,stats → seulement ces captures
+      const only = (process.env.VRCLOGS_SHOT_ONLY || '').split(',').filter(Boolean);
       for (const [name, js] of steps) {
+        if (only.length && !only.includes(name)) continue;
         try { await win.webContents.executeJavaScript(js); } catch { continue; } // étape impossible (ex : pas connecté)
         await new Promise(r => setTimeout(r, 1200));
         await win.webContents.capturePage();
@@ -392,6 +395,21 @@ ipcMain.handle('init', () => ({ events: allEvents, logDir: LOG_DIR, live: isLive
 ipcMain.handle('open-data-folder', () => shell.openPath(DATA_DIR));
 // Sites connus : on les ouvre directement. Les autres (liens dans une bio, un groupe…)
 // demandent confirmation, pour éviter les liens piégés (hameçonnage).
+// Textes de la fenêtre de confirmation, dans les 10 langues (la page nous dit laquelle)
+let UI_LANG = 'fr';
+ipcMain.handle('set-lang', (_e, l) => { if (/^[a-z]{2}$/.test(l)) UI_LANG = l; });
+const LINK_TXT = {
+  fr: ['Ouvrir', 'Annuler', 'Lien externe', 'Ouvrir ce site dans ton navigateur ?', "Ce lien vient d'un profil ou d'un groupe. Ne tape jamais ton mot de passe VRChat sur un site qui n'est pas vrchat.com."],
+  en: ['Open', 'Cancel', 'External link', 'Open this site in your browser?', 'This link comes from a profile or a group. Never type your VRChat password on a site that is not vrchat.com.'],
+  es: ['Abrir', 'Cancelar', 'Enlace externo', '¿Abrir este sitio en tu navegador?', 'Este enlace viene de un perfil o grupo. Nunca escribas tu contraseña de VRChat en un sitio que no sea vrchat.com.'],
+  pt: ['Abrir', 'Cancelar', 'Link externo', 'Abrir este site no navegador?', 'Este link vem de um perfil ou grupo. Nunca digite sua senha do VRChat em um site que não seja vrchat.com.'],
+  de: ['Öffnen', 'Abbrechen', 'Externer Link', 'Diese Seite im Browser öffnen?', 'Dieser Link stammt aus einem Profil oder einer Gruppe. Gib dein VRChat-Passwort nie auf einer Seite ein, die nicht vrchat.com ist.'],
+  it: ['Apri', 'Annulla', 'Link esterno', 'Aprire questo sito nel browser?', 'Questo link proviene da un profilo o da un gruppo. Non scrivere mai la password di VRChat su un sito che non sia vrchat.com.'],
+  ru: ['Открыть', 'Отмена', 'Внешняя ссылка', 'Открыть этот сайт в браузере?', 'Ссылка из профиля или группы. Никогда не вводи пароль VRChat на сайте, который не vrchat.com.'],
+  ja: ['開く', 'キャンセル', '外部リンク', 'このサイトをブラウザで開きますか？', 'このリンクはプロフィールまたはグループからのものです。vrchat.com 以外のサイトでVRChatのパスワードを入力しないでください。'],
+  ko: ['열기', '취소', '외부 링크', '이 사이트를 브라우저에서 열까요?', '이 링크는 프로필이나 그룹에서 왔습니다. vrchat.com이 아닌 사이트에 VRChat 비밀번호를 입력하지 마세요.'],
+  zh: ['打开', '取消', '外部链接', '在浏览器中打开此网站？', '此链接来自个人资料或群组。切勿在 vrchat.com 以外的网站输入你的 VRChat 密码。'],
+};
 const TRUSTED = /(^|\.)(vrchat\.com|vrchat\.cloud|steampowered\.com|steamcommunity\.com|youtube\.com|youtu\.be|avtrdb\.com|github\.com)$/i;
 ipcMain.handle('open-url', async (_e, url) => {
   url = String(url);
@@ -400,10 +418,10 @@ ipcMain.handle('open-url', async (_e, url) => {
   try { u = new URL(url); } catch { return; }
   if (!/^https?:$/.test(u.protocol)) return; // jamais de file://, javascript:, etc.
   if (!TRUSTED.test(u.hostname)) {
+    const T = LINK_TXT[UI_LANG] || LINK_TXT.fr;
     const { response } = await dialog.showMessageBox(win, {
-      type: 'warning', buttons: ['Ouvrir', 'Annuler'], defaultId: 1, cancelId: 1,
-      title: 'Lien externe', message: `Ouvrir ce site dans ton navigateur ?\n\n${u.hostname}`,
-      detail: 'Ce lien vient d\'un profil ou d\'un groupe. Ne tape jamais ton mot de passe VRChat sur un site qui n\'est pas vrchat.com.',
+      type: 'warning', buttons: [T[0], T[1]], defaultId: 1, cancelId: 1,
+      title: T[2], message: `${T[3]}\n\n${u.hostname}`, detail: T[4],
     });
     if (response !== 0) return;
   }

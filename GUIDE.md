@@ -23,7 +23,11 @@ avatars.js       → savoir si un avatar est public (base avtrDB)
 steam.js         → heures de jeu (fichiers Steam) et amis Steam (clé API)
 news.js          → actualités de VRChat (via Steam)
 ui/brain.js      → le cerveau d'amis (simulation physique)
-ui/extras.js     → pages Steam et Nouveautés
+ui/extras.js     → pages Steam, Nouveautés et Boutique
+ui/groups.js     → page Groupes VRChat
+ui/i18n.js       → le TRADUCTEUR (10 langues)
+ui/lang/*.js     → une traduction par langue : "phrase en français" → "traduction"
+scripts/         → vérification automatique avant chaque envoi sur GitHub
 dev/             → outils de test (faux amis), jamais inclus dans l'installateur
 ui/index.html    → la STRUCTURE de l'interface
 ui/style.css     → l'APPARENCE (les thèmes sont tout en haut)

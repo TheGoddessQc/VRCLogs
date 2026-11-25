@@ -67,7 +67,7 @@ function drawVGroups() {
           ${vimg(g.icon, 'vgicon')}
           <div class="vginfo">
             <div class="n">${esc(g.name)} ${g.representing ? '<span class="badge">⭐ Affiché</span>' : ''}${g.owner ? '<span class="badge">👑 Propriétaire</span>' : ''}${g.unread ? '<span class="badge new">🔔 Nouveau</span>' : ''}</div>
-            <div class="s">${esc(g.code)} · 👥 ${g.members.toLocaleString('fr')} · ${g.privacy === 'private' ? '🔒 Privé' : '🌍 Public'}</div>
+            <div class="s">${esc(g.code)} · 👥 ${g.members.toLocaleString(LOCALE)} · ${g.privacy === 'private' ? '🔒 Privé' : '🌍 Public'}</div>
           </div>
         </div>
       </div>`).join('') || '<div class="empty">Aucun groupe ne correspond.</div>'}</div>`;
@@ -108,8 +108,8 @@ async function openVGroup(id) {
         <h1>${esc(d.name)} ${d.verified ? '<span class="badge">✔️ Vérifié</span>' : ''}</h1>
         <div class="muted">${esc(d.code)} · ${d.privacy === 'private' ? '🔒 Privé' : '🌍 Public'}${d.representing ? ' · ⭐ Tu affiches ce groupe' : ''}</div>
         <div class="pfacts">
-          <span>👥 ${d.members.toLocaleString('fr')} membres</span><span class="sep">·</span>
-          <span class="t-join">● ${d.online.toLocaleString('fr')} en ligne</span>
+          <span>👥 ${d.members.toLocaleString(LOCALE)} membres</span><span class="sep">·</span>
+          <span class="t-join">● ${d.online.toLocaleString(LOCALE)} en ligne</span>
           ${d.joinedAt ? `<span class="sep">·</span><span>📅 Membre depuis le ${fmtDate(Date.parse(d.joinedAt))}</span>` : ''}
           ${d.createdAt ? `<span class="sep">·</span><span>🏗️ Créé le ${fmtDate(Date.parse(d.createdAt))}</span>` : ''}
         </div>

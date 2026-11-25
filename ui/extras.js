@@ -40,7 +40,7 @@ async function renderSteam() {
       ${accounts.length > 1 ? `<select id="steamAccount">${accounts.map(a => `<option value="${a.steamId}" ${a.steamId === acc.steamId ? 'selected' : ''}>${esc(a.name)}${a.remembered ? '' : ' (ancien compte)'}${a.minutes != null ? ` — ${Math.round(a.minutes / 60)} h` : ''}</option>`).join('')}</select>` : `<span class="muted">${esc(acc.name)}</span>`}
     </header>
     <div class="kpis">
-      <div class="card kpi"><div class="v">${Math.floor(minutes / 60).toLocaleString('fr')} h</div><div class="l">Sur VRChat au total ${t ? '<span class="badge">exact</span>' : '<span class="muted">(lu sur ton PC)</span>'}</div></div>
+      <div class="card kpi"><div class="v">${Math.floor(minutes / 60).toLocaleString(LOCALE)} h</div><div class="l">Sur VRChat au total ${t ? '<span class="badge">exact</span>' : '<span class="muted">(lu sur ton PC)</span>'}</div></div>
       <div class="card kpi"><div class="v">${fmtDur(two * 60000)}</div><div class="l">Ces 2 dernières semaines</div></div>
       <div class="card kpi"><div class="v">${last ? ago(last) : '—'}</div><div class="l">Dernière session${last ? ` · ${fmtDate(last)}` : ''}</div></div>
       <div class="card kpi"><div class="v">${fmtDur(tracked)}</div><div class="l">Suivies par VRCLogs</div></div>
@@ -110,7 +110,7 @@ function steamFriendsHtml() {
       <div class="finfo">
         <div class="n">${esc(f.name)}</div>
         <div class="s where">${stateTxt(f)}</div>
-        <div class="s">${f.minutes != null ? `⏱️ ${Math.round(f.minutes / 60).toLocaleString('fr')} h sur VRChat${f.minutes2wks ? ` · ${Math.round(f.minutes2wks / 60)} h ces 2 sem.` : ''}` : '🔒 Heures privées'}</div>
+        <div class="s">${f.minutes != null ? `⏱️ ${Math.round(f.minutes / 60).toLocaleString(LOCALE)} h sur VRChat${f.minutes2wks ? ` · ${Math.round(f.minutes2wks / 60)} h ces 2 sem.` : ''}` : '🔒 Heures privées'}</div>
         <div class="s">${f.since ? `Ami Steam depuis ${fmtDate(f.since)}` : ''}</div>
       </div>
     </div>`).join('') || '<div class="empty">Aucun ami Steam ne joue à VRChat (ou leurs profils sont privés).</div>'}</div>`;
@@ -147,7 +147,7 @@ function bindSteam(acc) {
   };
   if ($('steamRefresh')) $('steamRefresh').onclick = () => loadSteamFriends(acc, true);
   if ($('steamForget')) $('steamForget').onclick = async () => {
-    if (!confirm('Retirer ta clé API Steam de VRCLogs ?')) return;
+    if (!confirm(tr('Retirer ta clé API Steam de VRCLogs ?'))) return;
     await window.api.steam.clearKey();
     Object.assign(STEAM, { hasKey: false, time: null, friends: null, error: '' });
     renderSteam();
@@ -231,7 +231,7 @@ function paintSpot(key, kind, b) {
   el.querySelector('.simg').innerHTML = vimg(kind === 'world' ? b.thumb : (b.banner || b.icon));
   el.querySelector('.sname').classList.remove('muted');
   el.querySelector('.sname').innerHTML = `${kind === 'group' && b.icon ? vimg(b.icon, 'gicon') : ''}<span><b>${esc(b.name)}</b>
-    <span class="muted small">${kind === 'world' ? `par ${esc(b.author || '?')}${b.occupants ? ` · 👥 ${b.occupants}` : ''}` : `👥 ${Number(b.members || 0).toLocaleString('fr')} membres`}</span></span>`;
+    <span class="muted small">${kind === 'world' ? `par ${esc(b.author || '?')}${b.occupants ? ` · 👥 ${b.occupants}` : ''}` : `👥 ${Number(b.members || 0).toLocaleString(LOCALE)} membres`}</span></span>`;
   el.classList.toggle('nostore', !b.storeId);
 }
 async function openStoreModal(key) {
@@ -331,7 +331,7 @@ function listingHtml(l) {
         <div class="s">${l.types.map(t => `<span class="badge">${TYPE_NAMES[t] || esc(t)}</span>`).join('')}
           ${l.duration ? `<span class="badge">⏳ ${l.duration} ${{ days: 'jours', months: 'mois', weeks: 'semaines', hours: 'heures' }[l.durationType] || esc(l.durationType || '')}</span>` : '<span class="badge">♾️ Permanent</span>'}</div>
       </div>
-      <div class="price">💳 ${Number(l.price || 0).toLocaleString('fr')}<span>crédits VRChat</span>${l.vrcPlusPrice ? `<span class="muted">VRC+ : ${l.vrcPlusPrice}</span>` : ''}</div>
+      <div class="price">💳 ${Number(l.price || 0).toLocaleString(LOCALE)}<span>crédits VRChat</span>${l.vrcPlusPrice ? `<span class="muted">VRC+ : ${l.vrcPlusPrice}</span>` : ''}</div>
     </div>`;
 }
 
