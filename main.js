@@ -10,6 +10,19 @@ const { AvatarSearch, UA } = require('./avatars');
 const { Steam } = require('./steam');
 const { getNews } = require('./news');
 
+// ---------------------------------------------------------------------
+//  SÉCURITÉ : on n'accepte les demandes (IPC) QUE de notre propre interface
+//  (les fichiers de l'app, en file://). Une page web ne peut rien demander.
+// ---------------------------------------------------------------------
+const isOwnPage = e => (e.senderFrame?.url || '').startsWith('file://');
+const _handle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = (channel, fn) => _handle(channel, (e, ...args) => {
+  if (!isOwnPage(e)) throw new Error('Demande refusée');
+  return fn(e, ...args);
+});
+// Les modes test et diagnostic n'existent QUE dans la version de développement
+const DEV = !app.isPackaged;
+
 // "vrcimg://" = notre propre adresse pour afficher les images VRChat (avatars, mondes).
 // Elles passent par main.js, qui les télécharge proprement et les garde en cache.
 protocol.registerSchemesAsPrivileged([
@@ -274,7 +287,7 @@ function startVRChat() {
   avatarSearch = new AvatarSearch(DATA_DIR);
   steam = new Steam(DATA_DIR);
   // Mode test (développement seulement) : de faux amis pour vérifier l'affichage
-  if (process.env.VRCLOGS_MOCK) vrc = new (require('./dev/mock-vrchat'))(allEvents);
+  if (DEV && process.env.VRCLOGS_MOCK) vrc = new (require('./dev/mock-vrchat'))(allEvents);
   else vrc = new VRChat(DATA_DIR);
   protocol.handle('vrcimg', serveImage);
   // On reprend la session enregistrée en arrière-plan (la fenêtre n'attend pas)
@@ -297,9 +310,22 @@ function createWindow() {
     autoHideMenuBar: true,
     title: 'VRCLogs',
     icon: path.join(__dirname, 'build', 'icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false },
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: false,
+      // Sécurité (écrit noir sur blanc, même si ce sont déjà les valeurs par défaut) :
+      contextIsolation: true,  // l'interface ne voit que window.api, jamais Node.js
+      nodeIntegration: false,  // pas d'accès aux fichiers ou aux programmes depuis l'interface
+      sandbox: true,           // l'interface tourne dans un "bac à sable" isolé
+      webSecurity: true,
+    },
   });
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
+
+  // La fenêtre ne peut JAMAIS ouvrir ou charger une autre page
+  // (les liens passent par openUrl, qui les ouvre dans ton navigateur)
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', e => e.preventDefault());
 
   // Affiche les erreurs de l'interface dans le terminal (utile pour corriger les bugs)
   win.webContents.on('console-message', (_e, level, message, line, source) => {
@@ -307,7 +333,7 @@ function createWindow() {
   });
 
   // Mode diagnostic : VRCLOGS_EVAL="code" → exécute ce code dans l'interface, affiche le résultat, quitte
-  if (process.env.VRCLOGS_EVAL) {
+  if (DEV && process.env.VRCLOGS_EVAL) {
     win.webContents.once('did-finish-load', async () => {
       await new Promise(r => setTimeout(r, 8000));
       try { console.log('[EVAL]', JSON.stringify(await win.webContents.executeJavaScript(process.env.VRCLOGS_EVAL), null, 1)); }
@@ -317,7 +343,7 @@ function createWindow() {
   }
 
   // Mode test : VRCLOGS_SHOT=dossier → capture chaque onglet puis quitte
-  if (process.env.VRCLOGS_SHOT) {
+  if (DEV && process.env.VRCLOGS_SHOT) {
     win.webContents.once('did-finish-load', async () => {
       const steps = [
         ...['live', 'day', 'feed', 'worlds', 'people', 'groups', 'videos', 'stats']
@@ -364,9 +390,24 @@ function createWindow() {
 
 ipcMain.handle('init', () => ({ events: allEvents, logDir: LOG_DIR, live: isLive() }));
 ipcMain.handle('open-data-folder', () => shell.openPath(DATA_DIR));
-ipcMain.handle('open-url', (_e, url) => {
-  // On n'ouvre que des pages web, ou un lien "rejoindre" de VRChat
-  if (/^https?:\/\//i.test(url) || /^vrchat:\/\/launch\?/i.test(url)) shell.openExternal(url);
+// Sites connus : on les ouvre directement. Les autres (liens dans une bio, un groupe…)
+// demandent confirmation, pour éviter les liens piégés (hameçonnage).
+const TRUSTED = /(^|\.)(vrchat\.com|vrchat\.cloud|steampowered\.com|steamcommunity\.com|youtube\.com|youtu\.be|avtrdb\.com|github\.com)$/i;
+ipcMain.handle('open-url', async (_e, url) => {
+  url = String(url);
+  if (/^vrchat:\/\/launch\?/i.test(url)) return shell.openExternal(url); // "Rejoindre" dans VRChat
+  let u;
+  try { u = new URL(url); } catch { return; }
+  if (!/^https?:$/.test(u.protocol)) return; // jamais de file://, javascript:, etc.
+  if (!TRUSTED.test(u.hostname)) {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning', buttons: ['Ouvrir', 'Annuler'], defaultId: 1, cancelId: 1,
+      title: 'Lien externe', message: `Ouvrir ce site dans ton navigateur ?\n\n${u.hostname}`,
+      detail: 'Ce lien vient d\'un profil ou d\'un groupe. Ne tape jamais ton mot de passe VRChat sur un site qui n\'est pas vrchat.com.',
+    });
+    if (response !== 0) return;
+  }
+  return shell.openExternal(u.href);
 });
 ipcMain.handle('open-log-folder', () => shell.openPath(LOG_DIR));
 ipcMain.handle('export-csv', async (_e, text) => {

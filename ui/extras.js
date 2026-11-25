@@ -238,7 +238,7 @@ async function openStoreModal(key) {
   const b = SHOP.briefs.get(key);
   if (!b) return;
   const [kind, id] = key.split(':');
-  const link = kind === 'world' ? `https://vrchat.com/home/world/${id}` : `https://vrchat.com/home/group/${id}`;
+  const link = esc(kind === 'world' ? `https://vrchat.com/home/world/${id}` : `https://vrchat.com/home/group/${id}`);
   showModal(`<h1>🛍️ ${esc(b.name)}</h1>
     <p class="muted">${kind === 'world' ? '🌍 Monde' : '👥 Groupe'} · <a class="link" data-url="${link}">Voir sur VRChat ↗</a></p>
     <div class="card note">👀 Affichage seulement : les achats se font dans VRChat.</div>
