@@ -25,19 +25,29 @@ const RICH_PRESENCE = {
 };
 // Les options = celles du code, remplacées par tes choix dans les Paramètres
 const RP = () => Object.assign({}, RICH_PRESENCE, SETTINGS.rp);
-// La liste affichée dans l'onglet 🔌 Intégrations (comme VRCX)
-const RP_OPTIONS = [
-  ['enabled', 'Activer', ''],
-  ['worldIntegration', 'Intégration des mondes', 'Affiche « Regarde … » / « Écoute … » quand une vidéo ou une musique joue (mondes cinéma, karaoké, danse…)'],
-  ['showPlayers', "Type d'instance et nombre de joueurs", ''],
-  ['showPlatform', 'Afficher la plateforme', '🥽 VR ou 🖥️ Bureau'],
-  ['showPrivateDetails', 'Détails dans les instances privées', 'Montre le monde même dans les instances Invite, Invite+ et Group Members'],
-  ['joinButton', 'Bouton « Rejoindre » (public seulement)', ''],
-  ['worldButton', 'Bouton « Voir le monde »', ''],
-  ['showWorldImage', 'Images des mondes', 'Nécessite le compte VRChat connecté'],
-  ['showMediaImage', 'Images des vidéos', 'Utilise la miniature de la vidéo en cours (YouTube)'],
-  ['worldNameAsActivity', "Nom du monde comme activité", 'Affiche le nom du monde au lieu de « VRCLogs » dans ton statut Discord'],
+// Les options de l'onglet 🔌 Intégrations, rangées par famille : [clé, icône, titre, explication]
+const RP_GROUPS = [
+  ['✨ Ce que tes amis voient', [
+    ['showPlayers', '👥', "Type d'instance et nombre de joueurs", ''],
+    ['showPlatform', '🥽', 'Afficher la plateforme', '🥽 VR ou 🖥️ Bureau'],
+    ['worldIntegration', '🎬', 'Intégration des mondes', 'Affiche « Regarde … » / « Écoute … » quand une vidéo ou une musique joue (mondes cinéma, karaoké, danse…)'],
+    ['worldNameAsActivity', '🏷️', 'Nom du monde comme activité', 'Affiche le nom du monde au lieu de « VRCLogs » dans ton statut Discord'],
+  ]],
+  ['🖼️ Images', [
+    ['showWorldImage', '🌍', 'Images des mondes', 'Nécessite le compte VRChat connecté'],
+    ['showMediaImage', '📺', 'Images des vidéos', 'Utilise la miniature de la vidéo en cours (YouTube)'],
+  ]],
+  ['🔘 Boutons', [
+    ['worldButton', '🔗', 'Bouton « Voir le monde »', ''],
+    ['joinButton', '🚪', 'Bouton « Rejoindre » (public seulement)', ''],
+  ]],
+  ['🔒 Vie privée', [
+    ['showPrivateDetails', '🕵️', 'Détails dans les instances privées', 'Montre le monde même dans les instances Invite, Invite+ et Group Members'],
+  ]],
 ];
+// Un exemple pour l'aperçu, quand VRChat est fermé
+const RP_DEMO = { id: -1, world: 'The Black Cat', worldId: 'wrld_demo', instance: 'demo', instType: 'Public', start: Date.now() - 42 * 60000,
+  present: { size: 12 }, videos: [] };
 
 const DISCORD = Object.assign({
   hooks: { alerts: true, friends: true, status: true, world: false }, // quoi envoyer au webhook
@@ -49,13 +59,14 @@ const isPrivateInst = t => /^Invite|^Group members/i.test(t || '');
 const MEDIA_RECENT = 15 * 60 * 1000; // une vidéo lancée il y a moins de 15 min = « en cours »
 
 // Ce qu'on montre sur ton profil (on garde la même "carte" tant que rien ne change, pour ne pas spammer Discord)
-async function buildActivity() {
-  const c = M?.current;
+// (c, live, demo : pour l'aperçu, on peut lui donner une instance d'exemple)
+async function buildActivity(c = M?.current, live = LIVE, demo = false) {
   const P = RP();
-  if (!P.enabled || !LIVE || !c) return null; // VRChat fermé : on efface le statut
+  if (!P.enabled || !live || !c) return null; // VRChat fermé : on efface le statut
   const hide = !P.showPrivateDetails && isPrivateInst(c.instType);
   const where = hide ? '🔒' : c.instType;
-  const platform = P.showPlatform && M.vr != null ? (M.vr ? '🥽 VR' : tr('🖥️ Bureau')) : '';
+  const vr = demo ? true : M?.vr;
+  const platform = P.showPlatform && vr != null ? (vr ? '🥽 VR' : tr('🖥️ Bureau')) : '';
   let state = [P.showPlayers ? tr(`${where} · ${c.present.size} joueur(s)`) : '', platform].filter(Boolean).join(' · ') || where;
   let details = hide ? tr('Dans une instance privée') : c.world;
   let type = 0, start = c.start, image = null;
@@ -73,7 +84,7 @@ async function buildActivity() {
     }
     if (P.showMediaImage && info?.image) image = info.image;
   }
-  if (!image && !hide && P.showWorldImage && c.worldId && VRC.user) {
+  if (!image && !hide && !demo && P.showWorldImage && c.worldId && VRC.user) {
     try { image = (await window.api.worldBrief(c.worldId))?.thumb || null; } catch {}
   }
   const buttons = [];
@@ -108,26 +119,57 @@ async function updatePresence() {
 // Une option a changé dans les Paramètres
 async function rpChanged(key) {
   DSTATE.lastJson = '';
-  if (key === 'enabled') {
-    DSTATE.conn = await window.api.discord.setClient(RP().enabled ? RICH_PRESENCE.appId : null);
-    if (settingsTab === 'integrations' && !$('modal').classList.contains('hidden')) openSettings('integrations');
-  }
+  if (key === 'enabled') DSTATE.conn = await window.api.discord.setClient(RP().enabled ? RICH_PRESENCE.appId : null);
+  if (settingsTab === 'integrations' && !$('modal').classList.contains('hidden')) openSettings('integrations');
   updatePresence();
 }
-// L'onglet ⚙️ Paramètres → 🔌 Intégrations
+
+// ---------- L'onglet ⚙️ Paramètres → 🔌 Intégrations (au style de VRCLogs) ----------
 function integrationsTabHtml() {
   const P = RP();
   const st = DSTATE.conn;
+  const status = !P.enabled ? ['off', 'Désactivé'] : st.connected ? ['on', `Connecté${st.user ? ` · ${esc(st.user)}` : ''}`] : ['wait', esc(st.error || 'Connexion à Discord…')];
+  setTimeout(fillRpPreview, 0); // l'aperçu se remplit juste après l'affichage
   return `
-    <h2>💬 Statut Discord (Rich Presence)</h2>
-    <p class="muted small">* Seulement quand tu es dans une instance VRChat. Désactive la « Rich Presence » de VRChat (dans ses options) pour éviter les conflits.</p>
-    <p class="small">${!P.enabled ? '○ Désactivé' : st.connected ? `<span class="t-join">● Connecté${st.user ? ` · ${esc(st.user)}` : ''}</span>` : `○ ${esc(st.error || 'Connexion à Discord…')}`}</p>
-    <div class="rpopts">${RP_OPTIONS.map(([k, label, help]) => `
-      <label class="opt ${k !== 'enabled' && !P.enabled ? 'dim' : ''}"><span>${label}${help ? `<br><span class="muted small">${help}</span>` : ''}</span>
-        <input type="checkbox" class="switch" data-rp="${k}" ${P[k] ? 'checked' : ''}></label>`).join('')}
+    <div class="rphero ${P.enabled ? '' : 'off'}">
+      <div class="rphero-left">
+        <div class="rptitle">💬 Ton statut Discord</div>
+        <p>Tes amis Discord voient où tu es dans VRChat, en direct. Choisis ce que tu partages.</p>
+        <div class="rpstate ${status[0]}"><i></i>${status[1]}</div>
+        <label class="rpmain"><input type="checkbox" data-rp="enabled" ${P.enabled ? 'checked' : ''}><span>${P.enabled ? '✅ Statut activé' : '⏸️ Statut désactivé'}</span></label>
+      </div>
+      <div class="rpcard">
+        <div class="rpcard-head">${LIVE && M?.current ? 'En direct' : 'Aperçu (exemple)'}</div>
+        <div id="rpPreview" class="rpcard-body"></div>
+      </div>
     </div>
-    <p class="muted small">Les réglages par défaut sont écrits dans le code (ui/discord.js → RICH_PRESENCE).</p>
-    <button class="ghost" id="rpReset">↩️ Remettre les réglages par défaut</button>`;
+    ${RP_GROUPS.map(([title, opts]) => `
+      <h3 class="rpgroup">${title}</h3>
+      <div class="rptiles ${P.enabled ? '' : 'dim'}">${opts.map(([k, icon, label, help]) => `
+        <label class="rptile ${P[k] ? 'on' : ''}">
+          <input type="checkbox" data-rp="${k}" ${P[k] ? 'checked' : ''}>
+          <span class="rpico">${icon}</span>
+          <span class="rptxt"><b>${label}</b>${help ? `<small>${help}</small>` : ''}</span>
+          <span class="rpcheck">${P[k] ? '✓' : ''}</span>
+        </label>`).join('')}
+      </div>`).join('')}
+    <p class="muted small">💡 Désactive la « Rich Presence » de VRChat (dans ses options) pour éviter que les deux statuts se battent.</p>
+    <div class="fbtns"><button class="ghost" id="rpReset">↩️ Remettre les réglages par défaut</button></div>`;
+}
+// L'aperçu : ta vraie instance si VRChat est ouvert, sinon un exemple
+async function fillRpPreview() {
+  if (!$('rpPreview')) return;
+  const live = LIVE && M?.current;
+  const a = await buildActivity(live ? M.current : RP_DEMO, true, !live);
+  if (!$('rpPreview')) return;
+  $('rpPreview').innerHTML = !a ? '<div class="muted">⏸️ Rien n\'est affiché sur ton profil.</div>' : `
+    <div class="rpimg">${/^https:/.test(a.image || '') ? vimg(a.image) : '<img src="../build/icon.png" alt="">'}</div>
+    <div class="rpinfo">
+      <div class="rpkind">${a.type === 3 ? 'Regarde' : a.type === 2 ? 'Écoute' : 'Joue à'} ${a.showDetails ? esc(a.details) : 'VRCLogs'}</div>
+      <b>${esc(a.details)}</b><div>${esc(a.state)}</div>
+      <div class="muted small">⏱️ ${fmtDur(Date.now() - a.start)}</div>
+      <div class="rpbtns">${a.buttons.map(b => `<span>${esc(b.label)}</span>`).join('')}</div>
+    </div>`;
 }
 document.addEventListener('click', e => {
   if (e.target.id !== 'rpReset') return;

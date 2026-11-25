@@ -630,14 +630,50 @@ img.broken { display: none; }
 .steambtn b { letter-spacing: 2px; color: #66c0f4; }
 .steambtn:hover { background: linear-gradient(90deg, #1b2838, #3d6c8d); }
 
-/* ---------- Interrupteurs (onglet Intégrations, comme VRCX) ---------- */
-.rpopts { border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px; margin: 10px 0; }
-.rpopts .opt { padding: 10px 0; border-bottom: 1px solid var(--line); gap: 16px; }
-.rpopts .opt:last-child { border-bottom: 0; }
-.opt.dim { opacity: .45; }
-.rpopts input.switch { appearance: none; -webkit-appearance: none; flex: none; width: 38px; height: 22px; border-radius: 22px;
-  background: var(--card2); border: 1px solid var(--line); position: relative; cursor: pointer; transition: background .2s; }
-.rpopts input.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
-  background: var(--muted); transition: transform .2s, background .2s; }
-.rpopts input.switch:checked { background: var(--accent); border-color: var(--accent); }
-.rpopts input.switch:checked::after { transform: translateX(16px); background: var(--bg); }
+
+/* ---------- Onglet 🔌 Intégrations : statut Discord, au style VRCLogs ---------- */
+.rphero { display: grid; grid-template-columns: 1fr 330px; gap: 18px; align-items: center; padding: 20px; border-radius: 18px; margin: 8px 0 6px;
+  background: radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--accent2) 35%, transparent), transparent 60%),
+              linear-gradient(135deg, var(--hero), var(--card)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.rphero.off { filter: saturate(.4); }
+.rptitle { font-size: 22px; font-weight: 800; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.rphero p { margin: 6px 0 12px; color: var(--muted); }
+.rpstate { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 12px; border-radius: 20px; background: var(--card2); }
+.rpstate i { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.rpstate.on i { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.rpstate.wait i { background: var(--accent); animation: rppulse 1.2s infinite; }
+@keyframes rppulse { 50% { opacity: .3; } }
+.rpmain { display: block; margin-top: 14px; cursor: pointer; }
+.rpmain input { display: none; }
+.rpmain span { display: inline-block; padding: 10px 22px; border-radius: 12px; font-weight: 700; color: var(--bg);
+  background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 4px 16px color-mix(in srgb, var(--accent2) 40%, transparent); }
+.rphero.off .rpmain span { background: var(--card2); color: var(--text); box-shadow: none; }
+/* La carte façon profil Discord */
+.rpcard { background: var(--bg); border-radius: 14px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.rpcard-head { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 8px 12px; color: var(--muted);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent2) 25%, transparent), transparent); }
+.rpcard-body { display: flex; gap: 12px; padding: 12px; min-height: 96px; align-items: center; }
+.rpimg { flex: none; width: 76px; height: 76px; border-radius: 10px; overflow: hidden; background: var(--card2); }
+.rpimg img { width: 100%; height: 100%; object-fit: cover; }
+.rpinfo { min-width: 0; font-size: 13px; line-height: 1.45; }
+.rpinfo b, .rpinfo > div { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rpkind { font-size: 11px; font-weight: 700; color: var(--accent); }
+.rpbtns { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.rpbtns span { font-size: 11px; padding: 3px 10px; border-radius: 6px; background: var(--card2); border: 1px solid var(--line); }
+/* Les tuiles d'options */
+.rpgroup { margin: 18px 0 8px; }
+.rptiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.rptiles.dim { opacity: .45; pointer-events: none; }
+.rptile { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; cursor: pointer;
+  background: var(--card2); border: 1px solid var(--line); transition: transform .15s, border-color .15s, background .15s; }
+.rptile:hover { transform: translateY(-2px); border-color: var(--accent); }
+.rptile input { display: none; }
+.rptile.on { border-color: var(--accent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--card2)), color-mix(in srgb, var(--accent2) 10%, var(--card2))); }
+.rpico { font-size: 22px; line-height: 1; filter: grayscale(1); opacity: .6; transition: .15s; }
+.rptile.on .rpico { filter: none; opacity: 1; }
+.rptxt { flex: 1; display: grid; gap: 3px; }
+.rptxt small { color: var(--muted); font-size: 12px; }
+.rpcheck { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 12px;
+  border: 2px solid var(--line); color: var(--bg); }
+.rptile.on .rpcheck { border-color: transparent; background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+@media (max-width: 900px) { .rphero { grid-template-columns: 1fr; } }
