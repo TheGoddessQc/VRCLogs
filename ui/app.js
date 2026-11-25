@@ -1537,7 +1537,7 @@ document.addEventListener('click', e => {
     // Nouvelle langue : on l'enregistre et on recharge l'affichage
     SETTINGS.lang = el.dataset.lang;
     save('settings', SETTINGS);
-    return location.reload();
+    return window.api.reload(); // on demande à main.js de recharger (la sécurité bloque location.reload)
   }
   if ((el = hit('[data-day]'))) { DAY = startOfDay(DAY + +el.dataset.day * 86400000 + 3600000 * 2); return renderDay(); }
   if ((el = hit('[data-gotoday]'))) { DAY = +el.dataset.gotoday; return goTo('day'); }
@@ -1586,6 +1586,16 @@ applySettings();
   build();
   UPDATE.current = await window.api.version();
   if (SETTINGS.autoUpdate) setTimeout(() => checkUpdate(false), 5000); // vérifie 5 s après le démarrage
+  // Statut des serveurs VRChat : maintenant, puis toutes les 5 minutes
+  setTimeout(() => refreshStatus(false), 1500);
+  setInterval(() => refreshStatus(true), 5 * 60 * 1000);
+  // Nouvelle version installée depuis la dernière ouverture ? On montre "Quoi de neuf"
+  const seen = SETTINGS.lastSeenVersion;
+  if (seen !== UPDATE.current) {
+    SETTINGS.lastSeenVersion = UPDATE.current;
+    save('settings', SETTINGS);
+    setTimeout(() => showWhatsNew(seen), 2000);
+  }
   setVRC(await window.api.vrc.get());
   setStatus();
   render();

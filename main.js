@@ -248,6 +248,29 @@ ipcMain.handle('vrc:myGroups', safe(() => vrc.myGroups()));
 ipcMain.handle('vrc:groupInstances', safe(() => vrc.groupInstances()));
 ipcMain.handle('vrc:groupDetails', safe((_e, id) => vrc.groupDetails(id)));
 
+// ---------- Statut des serveurs VRChat ----------
+// La page officielle status.vrchat.com (service "Statuspage") a une adresse publique en JSON
+ipcMain.handle('vrcstatus:get', safe(async () => {
+  const res = await fetch('https://status.vrchat.com/api/v2/summary.json', { headers: { 'User-Agent': UA } });
+  if (!res.ok) throw new Error(`status.vrchat.com ${res.status}`);
+  const s = await res.json();
+  const groups = new Map((s.components || []).filter(c => c.group).map(c => [c.id, c.name]));
+  return {
+    indicator: s.status?.indicator || 'none',  // none | minor | major | critical | maintenance
+    description: s.status?.description || '',
+    updated: s.page?.updated_at || null,
+    components: (s.components || []).filter(c => !c.group)
+      .map(c => ({ name: c.name, status: c.status, group: groups.get(c.group_id) || '' })),
+    incidents: (s.incidents || []).map(i => ({
+      name: i.name, status: i.status, impact: i.impact, url: i.shortlink || 'https://status.vrchat.com',
+      updated: i.updated_at, text: i.incident_updates?.[0]?.body || '',
+    })),
+    maintenances: (s.scheduled_maintenances || []).map(m => ({
+      name: m.name, status: m.status, start: m.scheduled_for, end: m.scheduled_until, url: m.shortlink || 'https://status.vrchat.com',
+    })),
+  };
+}));
+
 // ---------- Mises à jour ----------
 // On demande à GitHub la dernière version publiée (page publique, rien n'est envoyé sur toi)
 const REPO = 'TheGoddessQc/VRCLogs';
@@ -261,6 +284,7 @@ function isNewer(a, b) {
   return false;
 }
 ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('app:reload', () => win?.webContents.reload()); // recharge l'interface (changement de langue)
 ipcMain.handle('update:check', safe(async () => {
   const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
     headers: { 'User-Agent': UA, Accept: 'application/vnd.github+json' },
@@ -353,7 +377,10 @@ function createWindow() {
   // La fenêtre ne peut JAMAIS ouvrir ou charger une autre page
   // (les liens passent par openUrl, qui les ouvre dans ton navigateur)
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  win.webContents.on('will-navigate', e => e.preventDefault());
+  // (sauf recharger la page de l'app elle-même : nécessaire pour changer de langue)
+  win.webContents.on('will-navigate', (e, url) => {
+    if (url.split('#')[0] !== win.webContents.getURL().split('#')[0]) e.preventDefault();
+  });
 
   // Affiche les erreurs de l'interface dans le terminal (utile pour corriger les bugs)
   win.webContents.on('console-message', (_e, level, message, line, source) => {
@@ -395,6 +422,13 @@ function createWindow() {
         ['shop-store', `document.querySelector('.spotcard:not(.nostore)')?.click(); new Promise(r => setTimeout(r, 3000))`],
         ['shop-visited', `hideModal(); SHOP.tab = 'visited'; renderShop(); new Promise(r => setTimeout(r, 2000))`],
         ['settings-look', `openSettings('look')`],
+        ['whatsnew', `showWhatsNew('0.3.0')`],
+        ['srv-status', `hideModal(); NEWS.tab = 'status'; goTo('news'); new Promise(r => setTimeout(r, 3000))`],
+        ['changelog', `NEWS.tab = 'app'; renderNews()`],
+        ['lang-click', `openSettings('look'); setTimeout(() => document.querySelector('[data-lang="ja"]').click(), 300); 'ok'`],
+        ['lang-after', `new Promise(r => setTimeout(r, 5000)).then(() => { openSettings('look'); return document.documentElement.lang; })`],
+        ['lang-back', `openSettings('look'); setTimeout(() => document.querySelector('[data-lang="fr"]').click(), 300); 'ok'`],
+        ['lang-back-after', `new Promise(r => setTimeout(r, 5000)).then(() => document.documentElement.lang)`],
         ['update', `openSettings('update'); checkUpdate(true).then(() => new Promise(r => setTimeout(r, 500)))`],
         ['update-new', `UPDATE.result = { current: '0.3.0', latest: '0.4.0', newer: true, page: 'https://github.com/TheGoddessQc/VRCLogs/releases', download: 'https://github.com/TheGoddessQc/VRCLogs/releases', size: 87677654, date: new Date().toISOString(), notes: '## Test\\n\\n**Nouveautés**\\n- Une fonction\\n- Une autre\\n\\n> Note' }; $('openSettings').classList.add('has-update'); openSettings('update')`],
         ['theme-neon', `document.querySelector('[data-theme-pick="neon"]').click()`],

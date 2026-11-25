@@ -166,12 +166,141 @@ window.api.steam.onProgress(p => {
 const NEWS = { items: null, error: '', officialOnly: true, stores: new Map() };
 
 async function renderNews() {
+  const tab = NEWS.tab || 'vrchat';
   $('view-news').innerHTML = `
-    <header class="bar"><h1>📰 Nouveautés VRChat</h1>
+    <header class="bar"><h1>📰 Nouveautés</h1>
       <button class="ghost" id="newsRefresh" title="Actualiser">🔄</button></header>
+    <div class="tabs">
+      <button class="tabbtn ${tab === 'vrchat' ? 'on' : ''}" data-ntab="vrchat">📢 Mises à jour VRChat</button>
+      <button class="tabbtn ${tab === 'status' ? 'on' : ''}" data-ntab="status">🟢 Statut des serveurs</button>
+      <button class="tabbtn ${tab === 'app' ? 'on' : ''}" data-ntab="app">✨ Notes de version VRCLogs</button>
+    </div>
     <div id="newsBody"></div>`;
-  $('newsRefresh').onclick = () => { NEWS.items = null; NEWS.error = ''; window.api.news(true).then(() => renderNews()); };
-  await drawNews();
+  $('newsRefresh').onclick = () => {
+    if (tab === 'status') return refreshStatus(false);
+    NEWS.items = null; NEWS.error = ''; window.api.news(true).then(() => renderNews());
+  };
+  if (tab === 'status') drawStatus();
+  else if (tab === 'app') drawChangelog();
+  else await drawNews();
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-ntab]');
+  if (t) { NEWS.tab = t.dataset.ntab; renderNews(); return; }
+  if (e.target.closest('#srvStatus')) { NEWS.tab = 'status'; goTo('news'); }
+});
+
+// ---------------------------------------------------------------------
+//  🟢 STATUT DES SERVEURS VRCHAT (status.vrchat.com)
+// ---------------------------------------------------------------------
+const SRV = { data: null, error: '', at: 0 };
+const SRV_LEVEL = {
+  none: ['ok', '🟢', 'Serveurs VRChat : tout fonctionne'],
+  minor: ['warn', '🟠', 'Serveurs VRChat : problèmes mineurs'],
+  major: ['down', '🔴', 'Serveurs VRChat : panne importante'],
+  critical: ['down', '🔴', 'Serveurs VRChat : panne majeure'],
+  maintenance: ['maint', '🔧', 'Serveurs VRChat : maintenance'],
+};
+const COMP_STATUS = {
+  operational: ['ok', 'Opérationnel'], degraded_performance: ['warn', 'Ralenti'], partial_outage: ['warn', 'Panne partielle'],
+  major_outage: ['down', 'Panne majeure'], under_maintenance: ['maint', 'En maintenance'],
+};
+const INC_STATUS = { investigating: 'Enquête en cours', identified: 'Cause identifiée', monitoring: 'Surveillance', resolved: 'Résolu', postmortem: 'Analyse',
+  scheduled: 'Prévue', in_progress: 'En cours', verifying: 'Vérification', completed: 'Terminée' };
+
+async function refreshStatus(notifyChange) {
+  const r = await window.api.vrcStatus();
+  if (r.error) SRV.error = r.error;
+  else {
+    const before = SRV.data?.indicator;
+    SRV.data = r;
+    SRV.error = '';
+    // Prévenir quand VRChat tombe… et quand il revient
+    if (notifyChange && before && before !== r.indicator) {
+      if (r.indicator === 'none') notify('✅ VRChat fonctionne à nouveau', 'Tous les services VRChat sont opérationnels.');
+      else notify(`${SRV_LEVEL[r.indicator]?.[1] || '⚠️'} ${SRV_LEVEL[r.indicator]?.[2] || 'VRChat a des problèmes'}`, r.incidents[0]?.name || '');
+    }
+  }
+  SRV.at = Date.now();
+  paintSrvBadge();
+  if (currentView === 'news' && (NEWS.tab || 'vrchat') === 'status') drawStatus();
+}
+function paintSrvBadge() {
+  const el = $('srvStatus');
+  if (!el) return;
+  if (!SRV.data) { el.className = 'status srv'; el.textContent = SRV.error ? '⚪ Statut VRChat inconnu' : '⚪ Statut VRChat…'; return; }
+  const [cls] = SRV_LEVEL[SRV.data.indicator] || SRV_LEVEL.minor;
+  // Version courte pour le menu (la version longue est dans 📰 Nouveautés → Statut)
+  const SHORT = { ok: '🟢 VRChat : en ligne', warn: '🟠 VRChat : problèmes', down: '🔴 VRChat : en panne', maint: '🔧 VRChat : maintenance' };
+  el.className = `status srv ${cls}`;
+  el.textContent = SHORT[cls];
+}
+function drawStatus() {
+  const box = $('newsBody');
+  if (!box) return;
+  if (!SRV.data) { box.innerHTML = `<div class="empty">${SRV.error ? `⚠️ ${esc(SRV.error)}` : 'Chargement du statut…'}</div>`; return; }
+  const d = SRV.data;
+  const [cls, ico, label] = SRV_LEVEL[d.indicator] || SRV_LEVEL.minor;
+  const byGroup = new Map();
+  for (const c of d.components) { const g = c.group || 'VRChat'; if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g).push(c); }
+  box.innerHTML = `
+    <div class="card srvhero ${cls}">
+      <div class="srvbig">${ico}</div>
+      <div><div class="srvtitle">${label}</div>
+        <div class="muted small">Vérifié ${ago(SRV.at)} · Mis à jour automatiquement toutes les 5 minutes ·
+          <a class="link" data-url="https://status.vrchat.com">status.vrchat.com ↗</a></div></div>
+    </div>
+    ${d.incidents.length ? `<h2>⚠️ Incidents en cours</h2>${d.incidents.map(i => `
+      <div class="card incident" data-url="${esc(i.url)}">
+        <div class="ititle">${esc(i.name)} <span class="badge">${INC_STATUS[i.status] || esc(i.status)}</span></div>
+        <div class="muted small">${fmtDT(Date.parse(i.updated))}</div>
+        ${i.text ? `<div class="bio notr">${esc(i.text)}</div>` : ''}
+      </div>`).join('')}` : ''}
+    ${d.maintenances.length ? `<h2>🔧 Maintenances prévues</h2>${d.maintenances.map(m => `
+      <div class="card incident" data-url="${esc(m.url)}">
+        <div class="ititle">${esc(m.name)} <span class="badge">${INC_STATUS[m.status] || esc(m.status)}</span></div>
+        <div class="muted small">${fmtDT(Date.parse(m.start))} → ${fmtDT(Date.parse(m.end))}</div>
+      </div>`).join('')}` : ''}
+    <h2>🖥️ Services</h2>
+    <div class="srvgrid">${[...byGroup.entries()].map(([g, comps]) => `
+      <div class="card"><div class="srvgroup notr">${esc(g)}</div>
+        ${comps.map(c => { const [k, t] = COMP_STATUS[c.status] || ['warn', c.status]; return `
+          <div class="srvrow"><span class="notr">${esc(c.name)}</span><span class="srvst ${k}">● ${t}</span></div>`; }).join('')}
+      </div>`).join('')}
+    </div>
+    <p class="muted small">Source : page de statut officielle de VRChat.</p>`;
+}
+
+// ---------------------------------------------------------------------
+//  ✨ NOTES DE VERSION DE VRCLOGS (fichier ui/changelog.js)
+// ---------------------------------------------------------------------
+const notesOf = entry => (LANG === 'fr' ? entry.fr : entry.en);
+function drawChangelog() {
+  $('newsBody').innerHTML = `<div class="changelog">${CHANGELOG.map(c => `
+    <div class="card cl ${c.version === UPDATE.current ? 'current' : ''}">
+      <div class="cltitle">VRCLogs ${esc(c.version)} ${c.version === UPDATE.current ? '<span class="badge">Ta version</span>' : ''}
+        <span class="muted small">${fmtDate(Date.parse(c.date + 'T12:00:00'))}</span></div>
+      <ul class="notr">${notesOf(c).map(n => `<li>${esc(n)}</li>`).join('')}</ul>
+    </div>`).join('')}</div>`;
+}
+// Après une mise à jour : la fenêtre "Quoi de neuf" (versions depuis la dernière vue)
+function showWhatsNew(sinceVersion) {
+  const idx = CHANGELOG.findIndex(c => c.version === sinceVersion);
+  const entries = sinceVersion && idx > 0 ? CHANGELOG.slice(0, idx) : CHANGELOG.slice(0, 1);
+  if (!entries.length) return;
+  showModal(`
+    <div class="whatsnew">
+      <div class="wnicon">✨</div>
+      <h1>Quoi de neuf dans VRCLogs ${esc(entries[0].version)} ?</h1>
+      ${entries.map(c => `<div class="card cl"><div class="cltitle">VRCLogs ${esc(c.version)}</div>
+        <ul class="notr">${notesOf(c).map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>`).join('')}
+      <div class="fbtns center">
+        <button class="primary" id="wnOk">Super !</button>
+        <button class="ghost" id="wnAll">📜 Toutes les notes de version</button>
+      </div>
+    </div>`);
+  $('wnOk').onclick = hideModal;
+  $('wnAll').onclick = () => { hideModal(); NEWS.tab = 'app'; goTo('news'); };
 }
 
 // ---------------------------------------------------------------------

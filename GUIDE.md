@@ -25,6 +25,7 @@ news.js          → actualités de VRChat (via Steam)
 ui/brain.js      → le cerveau d'amis (simulation physique)
 ui/extras.js     → pages Steam, Nouveautés et Boutique
 ui/groups.js     → page Groupes VRChat
+ui/changelog.js  → les NOTES DE VERSION (ajoute un bloc en haut à chaque nouvelle version)
 ui/i18n.js       → le TRADUCTEUR (10 langues)
 ui/lang/*.js     → une traduction par langue : "phrase en français" → "traduction"
 scripts/         → vérification automatique avant chaque envoi sur GitHub

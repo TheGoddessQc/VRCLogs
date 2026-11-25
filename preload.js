@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('api', {
   openUrl: url => ipcRenderer.invoke('open-url', url),
   setLang: lang => ipcRenderer.invoke('set-lang', lang),
   version: () => ipcRenderer.invoke('app:version'),
+  reload: () => ipcRenderer.invoke('app:reload'),
+  vrcStatus: () => ipcRenderer.invoke('vrcstatus:get'),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   openLogFolder: () => ipcRenderer.invoke('open-log-folder'),
   openDataFolder: () => ipcRenderer.invoke('open-data-folder'),

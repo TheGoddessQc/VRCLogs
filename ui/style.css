@@ -220,6 +220,40 @@ body.compact main { padding: 16px 20px; }
 .theme .dots { display: flex; justify-content: center; gap: 3px; margin-bottom: 6px; }
 .theme .dots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff3; }
 
+/* Statut des serveurs VRChat */
+.status.srv { cursor: pointer; font-size: 12px; color: var(--muted); }
+.status.srv:hover { background: var(--card2); }
+.status.srv.ok { color: var(--green); }
+.status.srv.warn { color: #ffa94d; }
+.status.srv.down { color: var(--red); animation: pulse 1.6s infinite; }
+.status.srv.maint { color: var(--blue); }
+.srvhero { display: flex; gap: 16px; align-items: center; margin-top: 12px; }
+.srvhero.ok { border-color: var(--green); }
+.srvhero.warn { border-color: #ffa94d; }
+.srvhero.down { border-color: var(--red); background: linear-gradient(135deg, #ff6b8122, var(--card)); }
+.srvhero.maint { border-color: var(--blue); }
+.srvbig { font-size: 42px; }
+.srvtitle { font-size: 19px; font-weight: 800; }
+.srvgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.srvgroup { font-weight: 700; margin-bottom: 6px; color: var(--accent); }
+.srvrow { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--line); }
+.srvrow:last-child { border-bottom: 0; }
+.srvst { white-space: nowrap; font-weight: 600; }
+.srvst.ok { color: var(--green); } .srvst.warn { color: #ffa94d; } .srvst.down { color: var(--red); } .srvst.maint { color: var(--blue); }
+.incident { cursor: pointer; margin-bottom: 8px; border-color: #ffa94d; }
+.incident .ititle { font-weight: 700; }
+
+/* Notes de version */
+.changelog { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.cl.current { border-color: var(--accent); }
+.cltitle { font-weight: 800; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.cl ul { margin: 8px 0 0; padding-left: 20px; line-height: 1.8; }
+.whatsnew { text-align: center; }
+.whatsnew .wnicon { font-size: 48px; }
+.whatsnew .cl { text-align: left; margin-top: 10px; }
+.fbtns.center { justify-content: center; margin-top: 16px; }
+.fbtns.center .primary { padding: 10px 28px; }
+
 /* Mises à jour */
 #openSettings { position: relative; }
 #openSettings.has-update::after {
