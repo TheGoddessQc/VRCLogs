@@ -363,4 +363,11 @@ I18N.ko = {
   "Aucun contact trouvé.": "연락처를 찾지 못했어요.",
   "Lecture…": "읽는 중…",
   "Aucune clé Steam dans le presse-papiers. Copie la clé (32 caractères) sur la page Steam, puis réessaie.": "클립보드에 Steam 키가 없어요. Steam 페이지에서 키(32자)를 복사한 뒤 다시 시도하세요.",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Désactivé": "꺼짐",
+  "C'est tout ! Il suffit que l'app Discord soit ouverte sur ce PC. Rien à créer, rien à copier.": "끝! 이 PC에서 디스코드 앱만 열려 있으면 돼요. 만들 것도, 복사할 것도 없어요.",
+  "Avancé : utiliser ma propre application Discord": "고급: 내 디스코드 애플리케이션 사용",
+  "Tu utilises ta propre application Discord ({0}).": "내 디스코드 애플리케이션({0})을 사용 중이에요.",
+  "Pour afficher un autre nom que celui de VRCLogs, crée ta propre application sur": "VRCLogs 말고 다른 이름을 표시하려면",
+  "et colle son Application ID :": "에서 애플리케이션을 만들고 Application ID를 붙여 넣으세요:",
 };

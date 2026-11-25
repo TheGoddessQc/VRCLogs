@@ -363,4 +363,11 @@ I18N.it = {
   "Aucun contact trouvé.": "Nessun contatto trovato.",
   "Lecture…": "Lettura…",
   "Aucune clé Steam dans le presse-papiers. Copie la clé (32 caractères) sur la page Steam, puis réessaie.": "Nessuna chiave Steam negli appunti. Copia la chiave (32 caratteri) dalla pagina Steam e riprova.",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Désactivé": "Disattivato",
+  "C'est tout ! Il suffit que l'app Discord soit ouverte sur ce PC. Rien à créer, rien à copier.": "Tutto qui! Basta che l’app Discord sia aperta su questo PC. Niente da creare, niente da copiare.",
+  "Avancé : utiliser ma propre application Discord": "Avanzato: usa la mia applicazione Discord",
+  "Tu utilises ta propre application Discord ({0}).": "Stai usando la tua applicazione Discord ({0}).",
+  "Pour afficher un autre nom que celui de VRCLogs, crée ta propre application sur": "Per mostrare un nome diverso da VRCLogs, crea la tua applicazione su",
+  "et colle son Application ID :": "e incolla il suo Application ID:",
 };

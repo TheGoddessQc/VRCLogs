@@ -363,4 +363,11 @@ I18N.ru = {
   "Aucun contact trouvé.": "Контакты не найдены.",
   "Lecture…": "Чтение…",
   "Aucune clé Steam dans le presse-papiers. Copie la clé (32 caractères) sur la page Steam, puis réessaie.": "В буфере обмена нет ключа Steam. Скопируй ключ (32 символа) на странице Steam и попробуй снова.",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Désactivé": "Выключено",
+  "C'est tout ! Il suffit que l'app Discord soit ouverte sur ce PC. Rien à créer, rien à copier.": "Вот и всё! Нужно только, чтобы приложение Discord было открыто на этом ПК. Ничего создавать и копировать не надо.",
+  "Avancé : utiliser ma propre application Discord": "Дополнительно: своё приложение Discord",
+  "Tu utilises ta propre application Discord ({0}).": "Ты используешь своё приложение Discord ({0}).",
+  "Pour afficher un autre nom que celui de VRCLogs, crée ta propre application sur": "Чтобы показывать другое имя вместо VRCLogs, создай своё приложение на",
+  "et colle son Application ID :": "и вставь его Application ID:",
 };

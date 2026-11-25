@@ -446,6 +446,8 @@ function createWindow() {
         ['steam', `hideModal(); goTo('steam'); new Promise(r => setTimeout(r, 3000))`],
         ['steam-nokey', `hideModal(); STEAM.hasKey = false; STEAM.contactsFor = null; renderSteam(); new Promise(r => setTimeout(r, 2500)).then(() => window.scrollTo(0, 0))`],
         ['discord', `hideModal(); goTo('discord')`],
+        ['discord-off', `DISCORD.clientId = '123456789012345678'; DISCORD.presence = false; renderDiscord()`],
+        ['discord-on', `DISCORD.presence = true; renderDiscord(); DISCORD.clientId = ''; DISCORD.presence = false; 'ok'`],
         ['chatbox', `goTo('chatbox')`],
         ['news', `goTo('news'); new Promise(r => setTimeout(r, 4000))`],
         ['vgroups', `hideModal(); goTo('vgroups'); new Promise(r => setTimeout(r, 6000))`],

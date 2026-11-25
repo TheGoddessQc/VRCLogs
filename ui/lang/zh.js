@@ -363,4 +363,11 @@ I18N.zh = {
   "Aucun contact trouvé.": "未找到联系人。",
   "Lecture…": "读取中…",
   "Aucune clé Steam dans le presse-papiers. Copie la clé (32 caractères) sur la page Steam, puis réessaie.": "剪贴板中没有 Steam 密钥。请在 Steam 页面复制密钥（32 个字符），然后重试。",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Désactivé": "已关闭",
+  "C'est tout ! Il suffit que l'app Discord soit ouverte sur ce PC. Rien à créer, rien à copier.": "就这样！只要这台电脑上打开了 Discord 应用即可。无需创建，无需复制。",
+  "Avancé : utiliser ma propre application Discord": "高级：使用我自己的 Discord 应用",
+  "Tu utilises ta propre application Discord ({0}).": "你正在使用自己的 Discord 应用（{0}）。",
+  "Pour afficher un autre nom que celui de VRCLogs, crée ta propre application sur": "要显示 VRCLogs 以外的名称，请在",
+  "et colle son Application ID :": "创建自己的应用，并粘贴它的 Application ID：",
 };

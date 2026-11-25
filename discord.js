@@ -34,6 +34,10 @@ function encode(op, data) {
   return Buffer.concat([head, json]);
 }
 
+// Une image = une adresse https (image du monde) OU le nom d'une image
+// enregistrée dans l'application Discord (ex : "logo", dans Rich Presence → Art Assets)
+const img = s => (/^https:\/\//.test(s || '') || /^[a-z0-9_-]{1,32}$/.test(s || '')) ? s : undefined;
+
 // Discord exige entre 2 et 128 caractères par ligne
 const line = (s, max = 128) => {
   s = String(s || '').trim();
@@ -152,9 +156,9 @@ class DiscordPresence {
         state: line(a.state),
         timestamps: a.start ? { start: Math.floor(a.start) } : undefined,
         assets: {
-          large_image: /^https:\/\//.test(a.image || '') ? a.image : undefined,
+          large_image: img(a.image),
           large_text: line(a.imageText),
-          small_image: /^https:\/\//.test(a.smallImage || '') ? a.smallImage : undefined,
+          small_image: img(a.smallImage),
           small_text: line(a.smallText),
         },
         buttons: (a.buttons || []).filter(b => b?.label && /^https:\/\//.test(b.url || '')).slice(0, 2)

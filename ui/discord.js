@@ -3,9 +3,14 @@
 //   1. Statut sur ton profil Discord (Rich Presence)
 //   2. Alertes dans un salon de ton serveur (webhook)
 // =====================================================================
+// L'application Discord OFFICIELLE de VRCLogs (comme VRCX) : créée une fois par l'autrice,
+// sur discord.com/developers. Ce numéro est PUBLIC (il dit juste à Discord quel nom et quel logo
+// afficher) : tout le monde peut l'utiliser, sans rien configurer.
+const VRCLOGS_APP_ID = '';
+
 const DISCORD = Object.assign({
-  clientId: '',          // Application ID (public) créé par toi sur discord.com/developers
-  presence: true,        // afficher le statut
+  clientId: '',          // (avancé) Application ID personnel, à la place de celui de VRCLogs
+  presence: false,       // afficher le statut (tu l'actives toi-même, comme dans VRCX)
   showWorld: 'notinvite',// always | notinvite | never
   showPlayers: true,
   showImage: true,
@@ -14,6 +19,13 @@ const DISCORD = Object.assign({
 }, load('discord', {}));
 const DSTATE = { conn: { enabled: false, connected: false, user: null, error: '' }, hasWebhook: false, webhookError: '', idError: '', lastJson: '', lastSession: null };
 const saveDiscord = () => save('discord', DISCORD);
+const appId = () => DISCORD.clientId || VRCLOGS_APP_ID; // ton application, sinon celle de VRCLogs
+// Allume ou éteint la connexion avec l'app Discord de ton PC
+async function connectPresence() {
+  DSTATE.lastJson = '';
+  DSTATE.conn = await window.api.discord.setClient(DISCORD.presence && appId() ? appId() : null);
+  updatePresence();
+}
 
 // ---------- Ce qu'on montre sur ton profil ----------
 // (on garde la même "carte" tant que rien ne change, pour ne pas spammer Discord)
@@ -29,9 +41,12 @@ async function buildActivity() {
   }
   return {
     details: hide ? tr('Dans une instance privée') : c.world,
+    // sans image du monde : le logo de l'application (image "logo" dans Rich Presence → Art Assets)
+    image: img || 'logo',
+    smallImage: img ? 'logo' : undefined,
+    smallText: 'VRCLogs',
     state: DISCORD.showPlayers ? tr(`${hide ? '🔒' : c.instType} · ${n} joueur(s)`) : (hide ? '🔒' : c.instType),
     start: c.start,
-    image: img,
     imageText: hide ? undefined : c.world,
     buttons: !hide && DISCORD.worldButton && c.worldId ? [{ label: tr('Voir le monde'), url: `https://vrchat.com/home/world/${c.worldId}` }] : [],
   };
@@ -44,7 +59,7 @@ async function updatePresence() {
     window.api.discord.post({ title: tr('🌍 Nouveau monde') + ' : ' + c.world, text: c.instType, color: 0x42a5ff });
   }
   DSTATE.lastSession = c ? c.id : DSTATE.lastSession ?? null;
-  if (!DISCORD.clientId) return;
+  if (!DSTATE.conn.enabled) return;
   const a = await buildActivity();
   const json = JSON.stringify(a);
   if (json === DSTATE.lastJson) return;
@@ -64,7 +79,8 @@ function discordHook(kind, title, body) {
 function renderDiscord() {
   const el = $('view-discord');
   const st = DSTATE.conn;
-  const badge = !DISCORD.clientId ? '<span class="badge">Pas configuré</span>'
+  const badge = !appId() ? '<span class="badge">Pas configuré</span>'
+    : !DISCORD.presence ? '<span class="badge">Désactivé</span>'
     : st.connected ? `<span class="badge new">● Connecté${st.user ? ` · ${esc(st.user)}` : ''}</span>`
     : `<span class="badge">○ ${esc(st.error || 'Connexion à Discord…')}</span>`;
   el.innerHTML = `
@@ -73,7 +89,7 @@ function renderDiscord() {
     <div class="card dcard">
       <h2>🎮 Statut sur ton profil Discord ${badge}</h2>
       <p class="muted">Tes amis Discord voient le monde VRChat où tu es, depuis combien de temps et combien de joueurs, comme sur ton profil quand tu joues à un jeu.</p>
-      ${DISCORD.clientId ? presenceOptionsHtml() : presenceSetupHtml()}
+      ${appId() ? presenceOptionsHtml() : presenceSetupHtml()}
     </div>
 
     <div class="card dcard">
@@ -109,8 +125,18 @@ function presenceSetupHtml() {
 function presenceOptionsHtml() {
   const opt = (v, t) => `<option value="${v}" ${DISCORD.showWorld === v ? 'selected' : ''}>${t}</option>`;
   const chk = (k, t) => `<label class="inline"><input type="checkbox" data-dset="${k}" ${DISCORD[k] ? 'checked' : ''}> ${t}</label>`;
-  return `<div class="dopts">
-      ${chk('presence', 'Afficher mon statut VRChat sur Discord')}
+  const own = DISCORD.clientId
+    ? `<p class="muted small">Tu utilises ta propre application Discord (${esc(DISCORD.clientId)}).</p><button class="ghost" id="dForgetId">🗑️ Retirer l'Application ID</button>`
+    : `<p class="muted small">Pour afficher un autre nom que celui de VRCLogs, crée ta propre application sur <a class="link" data-url="https://discord.com/developers/applications">discord.com/developers</a> et colle son Application ID :</p>
+       <form id="dClientForm" class="keyform"><input id="dClientId" inputmode="numeric" autocomplete="off" placeholder="Application ID (ex : 1234567890123456789)" required><button class="primary">Activer</button></form>
+       ${DSTATE.idError ? `<p class="t-leave">⚠️ ${esc(DSTATE.idError)}</p>` : ''}`;
+  const advanced = `<details class="small dadv"><summary>Avancé : utiliser ma propre application Discord</summary>${own}</details>`;
+  if (!DISCORD.presence) return `
+    <label class="bigtoggle"><input type="checkbox" data-dset="presence"> <b>Afficher mon statut VRChat sur Discord</b></label>
+    <p class="muted small">C'est tout ! Il suffit que l'app Discord soit ouverte sur ce PC. Rien à créer, rien à copier.</p>
+    ${VRCLOGS_APP_ID ? advanced : ''}`;
+  return `<label class="bigtoggle"><input type="checkbox" data-dset="presence" checked> <b>Afficher mon statut VRChat sur Discord</b></label>
+    <div class="dopts">
       <label class="inline">Montrer le monde : <select id="dShowWorld">${opt('always', 'Toujours')}${opt('notinvite', 'Sauf instances privées (Invite)')}${opt('never', 'Jamais')}</select></label>
       ${chk('showPlayers', 'Nombre de joueurs')}
       ${chk('showImage', 'Image du monde (compte VRChat connecté)')}
@@ -118,13 +144,13 @@ function presenceOptionsHtml() {
     </div>
     <h3>Aperçu</h3>
     <div id="dPreview" class="dpreview">${previewHtml(null)}</div>
-    <div class="bar small-bar"><button class="ghost" id="dForgetId">🗑️ Retirer l'Application ID</button>
-      <span class="muted small">Discord doit être ouvert sur ce PC. Dans Discord : Paramètres → Confidentialité de l'activité → « Partager mon activité » doit être activé.</span></div>`;
+    <p class="muted small">Discord doit être ouvert sur ce PC. Dans Discord : Paramètres → Confidentialité de l'activité → « Partager mon activité » doit être activé.</p>
+    ${VRCLOGS_APP_ID ? advanced : `<button class="ghost" id="dForgetId">🗑️ Retirer l'Application ID</button>`}`;
 }
 
 function previewHtml(a) {
   if (!a) return `<div class="muted">${LIVE ? '…' : 'VRChat est fermé : rien n\'est affiché sur ton profil.'}</div>`;
-  return `<div class="dpimg">${a.image ? vimg(a.image) : '🎮'}</div>
+  return `<div class="dpimg">${/^https:/.test(a.image || '') ? vimg(a.image) : '🎮'}</div>
     <div><div class="muted small">Joue à …</div><b>${esc(a.details)}</b><div>${esc(a.state)}</div>
     <div class="muted small">⏱️ ${fmtDur(Date.now() - a.start)}</div>
     ${a.buttons.map(b => `<span class="dpbtn">${esc(b.label)}</span>`).join('')}</div>`;
@@ -159,21 +185,21 @@ function bindDiscord() {
   if ($('dClientForm')) $('dClientForm').onsubmit = async e => {
     e.preventDefault();
     const id = $('dClientId').value.trim();
-    const r = await window.api.discord.setClient(id);
-    if (r.error) { DSTATE.idError = r.error; return renderDiscord(); }
+    if (!/^\d{17,20}$/.test(id)) { DSTATE.idError = tr('Un Application ID Discord est un nombre de 17 à 20 chiffres.'); return renderDiscord(); }
     DSTATE.idError = '';
-    DISCORD.clientId = id; saveDiscord();
-    DSTATE.conn = r; DSTATE.lastJson = '';
-    updatePresence();
+    DISCORD.clientId = id; DISCORD.presence = true; saveDiscord();
+    await connectPresence();
     renderDiscord();
   };
   if ($('dForgetId')) $('dForgetId').onclick = async () => {
     DISCORD.clientId = ''; saveDiscord();
-    DSTATE.conn = await window.api.discord.setClient(null);
+    await connectPresence();
     renderDiscord();
   };
-  document.querySelectorAll('[data-dset]').forEach(i => i.onchange = () => {
-    DISCORD[i.dataset.dset] = i.checked; saveDiscord(); DSTATE.lastJson = ''; updatePresence(); refreshPreview();
+  document.querySelectorAll('[data-dset]').forEach(i => i.onchange = async () => {
+    DISCORD[i.dataset.dset] = i.checked; saveDiscord();
+    if (i.dataset.dset === 'presence') { await connectPresence(); return renderDiscord(); } // la grande case : on (dé)connecte
+    DSTATE.lastJson = ''; updatePresence(); refreshPreview();
   });
   if ($('dShowWorld')) $('dShowWorld').onchange = e => { DISCORD.showWorld = e.target.value; saveDiscord(); DSTATE.lastJson = ''; updatePresence(); refreshPreview(); };
   if ($('dHookForm')) $('dHookForm').onsubmit = async e => {
@@ -214,7 +240,7 @@ async function refreshPreview() {
     if (currentView === 'discord' && $('modal').classList.contains('hidden') && !document.activeElement?.closest('#view-discord input')) renderDiscord();
     if (s.connected) updatePresence();
   });
-  if (DISCORD.clientId) DSTATE.conn = await window.api.discord.setClient(DISCORD.clientId);
+  if (DISCORD.presence && appId()) await connectPresence();
   setTimeout(updatePresence, 3000);
   setInterval(updatePresence, 15000); // toutes les 15 s (le nombre de joueurs change)
 })();

@@ -363,4 +363,11 @@ I18N.ja = {
   "Aucun contact trouvé.": "連絡先が見つかりません。",
   "Lecture…": "読み込み中…",
   "Aucune clé Steam dans le presse-papiers. Copie la clé (32 caractères) sur la page Steam, puis réessaie.": "クリップボードにSteamキーがありません。Steamのページでキー（32文字）をコピーしてから、もう一度試してください。",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Désactivé": "オフ",
+  "C'est tout ! Il suffit que l'app Discord soit ouverte sur ce PC. Rien à créer, rien à copier.": "これだけ！このPCでDiscordアプリを開いておくだけです。作成もコピーも不要です。",
+  "Avancé : utiliser ma propre application Discord": "詳細：自分のDiscordアプリケーションを使う",
+  "Tu utilises ta propre application Discord ({0}).": "自分のDiscordアプリケーション（{0}）を使用中です。",
+  "Pour afficher un autre nom que celui de VRCLogs, crée ta propre application sur": "VRCLogs以外の名前を表示するには、自分のアプリケーションを",
+  "et colle son Application ID :": "で作成し、Application IDを貼り付けます：",
 };

@@ -379,4 +379,11 @@ I18N.en = {
   "Aucun contact trouvé.": "No contact found.",
   "Lecture…": "Reading…",
   "Aucune clé Steam dans le presse-papiers. Copie la clé (32 caractères) sur la page Steam, puis réessaie.": "No Steam key in the clipboard. Copy the key (32 characters) on the Steam page, then try again.",
+  // --- Discord, Chatbox, Steam sans clé ---
+  "Désactivé": "Off",
+  "C'est tout ! Il suffit que l'app Discord soit ouverte sur ce PC. Rien à créer, rien à copier.": "That is all! The Discord app just needs to be open on this PC. Nothing to create, nothing to copy.",
+  "Avancé : utiliser ma propre application Discord": "Advanced: use my own Discord application",
+  "Tu utilises ta propre application Discord ({0}).": "You are using your own Discord application ({0}).",
+  "Pour afficher un autre nom que celui de VRCLogs, crée ta propre application sur": "To show a name other than VRCLogs, create your own application on",
+  "et colle son Application ID :": "and paste its Application ID:",
 };
