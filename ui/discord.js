@@ -10,6 +10,7 @@
 const RICH_PRESENCE = {
   appId: '1574994157393543292', // l'application Discord officielle de VRCLogs (numéro PUBLIC, pas un secret)
   logo: 'logo',                 // nom de l'image dans Discord Developer Portal → Rich Presence → Art Assets
+  website: 'https://github.com/TheGoddessQc/VRCLogs', // le bouton « ✨ VRCLogs »
   refresh: 15000,               // on met à jour toutes les 15 secondes
   // --- options (modifiables dans les Paramètres) ---
   enabled: true,                // statut activé
@@ -19,6 +20,7 @@ const RICH_PRESENCE = {
   showPrivateDetails: false,    // montrer le monde même dans une instance privée (Invite, Invite+, Group Members)
   joinButton: false,            // bouton « Rejoindre » (instances publiques seulement)
   worldButton: true,            // bouton « Voir le monde »
+  vrclogsButton: true,          // bouton « ✨ VRCLogs » (ta page GitHub), s'il reste une place
   showWorldImage: true,         // image du monde (compte VRChat connecté), sinon le logo
   showMediaImage: false,        // image de la vidéo en cours (quand c'est YouTube)
   worldNameAsActivity: false,   // dans ton statut : le nom du monde au lieu de « VRCLogs »
@@ -40,6 +42,7 @@ const RP_GROUPS = [
   ['🔘 Boutons', [
     ['worldButton', '🔗', 'Bouton « Voir le monde »', ''],
     ['joinButton', '🚪', 'Bouton « Rejoindre » (public seulement)', ''],
+    ['vrclogsButton', '✨', 'Bouton « VRCLogs »', 'Tes amis peuvent découvrir et télécharger VRCLogs'],
   ]],
   ['🔒 Vie privée', [
     ['showPrivateDetails', '🕵️', 'Détails dans les instances privées', 'Montre le monde même dans les instances Invite, Invite+ et Group Members'],
@@ -64,11 +67,14 @@ async function buildActivity(c = M?.current, live = LIVE, demo = false) {
   const P = RP();
   if (!P.enabled || !live || !c) return null; // VRChat fermé : on efface le statut
   const hide = !P.showPrivateDetails && isPrivateInst(c.instType);
-  const where = hide ? '🔒' : c.instType;
   const vr = demo ? true : M?.vr;
   const platform = P.showPlatform && vr != null ? (vr ? '🥽 VR' : tr('🖥️ Bureau')) : '';
-  let state = [P.showPlayers ? tr(`${where} · ${c.present.size} joueur(s)`) : '', platform].filter(Boolean).join(' · ') || where;
-  let details = hide ? tr('Dans une instance privée') : c.world;
+  // Le style VRCLogs : une icône et un joli nom pour chaque type d'instance
+  const inst = instLabel(c.instType);
+  const n = c.present.size;
+  const players = n === 1 ? tr('👥 1 joueur') : n > 1 ? tr(`👥 ${n} joueurs`) : '';
+  let state = [P.showPlayers ? players : '', P.showPlayers ? inst : '', platform].filter(Boolean).join(' · ') || inst;
+  let details = hide ? tr('🔒 Instance privée') : `🌍 ${c.world}`;
   let type = 0, start = c.start, image = null;
 
   // Une vidéo / musique joue dans le monde ? → « Regarde … » / « Écoute … »
@@ -78,8 +84,8 @@ async function buildActivity(c = M?.current, live = LIVE, demo = false) {
     try { info = await window.api.mediaInfo(video.url); } catch {}
     if (P.worldIntegration && info) {
       type = info.music ? 2 : 3;
-      details = info.title || info.host;
-      state = c.world + (platform ? ' · ' + platform : '');
+      details = `${info.music ? '🎵' : '🎬'} ${info.title || info.host}`;
+      state = [`🌍 ${c.world}`, platform].filter(Boolean).join(' · ');
       start = video.t;
     }
     if (P.showMediaImage && info?.image) image = info.image;
@@ -87,21 +93,29 @@ async function buildActivity(c = M?.current, live = LIVE, demo = false) {
   if (!image && !hide && !demo && P.showWorldImage && c.worldId && VRC.user) {
     try { image = (await window.api.worldBrief(c.worldId))?.thumb || null; } catch {}
   }
+  // Discord accepte 2 boutons maximum : Rejoindre / Voir le monde, puis notre bouton VRCLogs s'il reste de la place
   const buttons = [];
   if (!hide && P.joinButton && c.instType === 'Public' && c.instance) {
-    buttons.push({ label: tr('Rejoindre'), url: `https://vrchat.com/home/launch?worldId=${encodeURIComponent(c.worldId)}&instanceId=${encodeURIComponent(c.instance)}` });
+    buttons.push({ label: tr('🚪 Rejoindre'), url: `https://vrchat.com/home/launch?worldId=${encodeURIComponent(c.worldId)}&instanceId=${encodeURIComponent(c.instance)}` });
   }
-  if (!hide && P.worldButton && c.worldId) buttons.push({ label: tr('Voir le monde'), url: `https://vrchat.com/home/world/${c.worldId}` });
+  if (!hide && P.worldButton && c.worldId) buttons.push({ label: tr('🌍 Voir le monde'), url: `https://vrchat.com/home/world/${c.worldId}` });
+  if (P.vrclogsButton && buttons.length < 2) buttons.push({ label: '✨ VRCLogs', url: RICH_PRESENCE.website });
   return {
     type, details, state, start,
     showDetails: P.worldNameAsActivity && !hide,
     image: image || P.logo,
-    imageText: hide ? 'VRChat' : c.world,
+    imageText: hide ? 'VRChat' : [c.world, c.region].filter(Boolean).join(' · '),
     smallImage: image ? P.logo : undefined,
-    smallText: 'VRCLogs',
+    smallText: tr('VRCLogs ✨ les logs avancés de VRChat'),
     buttons,
   };
 }
+// « Group public » → « 🏛️ Groupe public », etc.
+const INST_LABELS = {
+  'Public': '🌐 Public', 'Friends+': '👥 Amis+', 'Friends': '💜 Amis', 'Invite+': '✉️ Invitation+', 'Invite': '🔒 Invitation',
+  'Group public': '🏛️ Groupe public', 'Group plus': '🏛️ Groupe+', 'Group members': '🏛️ Membres du groupe',
+};
+const instLabel = t => tr(INST_LABELS[t] || (/^Group/i.test(t || '') ? '🏛️ Groupe' : t || 'VRChat'));
 async function updatePresence() {
   // Nouveau monde → alerte webhook (si demandé)
   const c = LIVE ? M?.current : null;
