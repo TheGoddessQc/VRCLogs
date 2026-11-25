@@ -237,6 +237,19 @@ body.compact main { padding: 16px 20px; }
 .opt:nth-of-type(even) { border-left-color: var(--accent2); }
 .opt:hover { background: var(--card2); }
 
+/* Vitrine VRChat */
+.spotgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.spotcard { background: var(--card); border: 1px solid transparent; border-radius: 12px; overflow: hidden; cursor: pointer; transition: .15s; }
+.spotcard:hover { border-color: var(--accent); transform: translateY(-2px); }
+.spotcard .simg { aspect-ratio: 16 / 10; background: var(--card2); display: flex; align-items: center; justify-content: center; }
+.spotcard .simg img { width: 100%; height: 100%; object-fit: cover; }
+.spotcard .sname { padding: 8px 10px; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.spotcard .sname > span { display: flex; flex-direction: column; min-width: 0; }
+.spotcard .sname b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spotcard .gicon { width: 30px; height: 30px; border-radius: 8px; object-fit: cover; flex: none; }
+.spotcard.nostore { opacity: .6; }
+#modalListings { margin-top: 10px; }
+
 /* Boutique */
 .shopinfo { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; background: linear-gradient(90deg, var(--hero), var(--card)); }
 .shopicon { font-size: 34px; }

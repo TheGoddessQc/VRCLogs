@@ -177,19 +177,87 @@ async function renderNews() {
 // ---------------------------------------------------------------------
 //  🛍️ BOUTIQUE : les boutiques des mondes (affichage seulement)
 // ---------------------------------------------------------------------
+const SHOP = { tab: 'spot', spot: null, briefs: new Map(), error: '' };
+
 function renderShop() {
   $('view-shop').innerHTML = `
     <header class="bar"><h1>🛍️ Boutique</h1></header>
-    <div class="card shopinfo">
-      <div class="shopicon">🏪</div>
-      <div><b>Boutique officielle de VRChat</b>
-        <div class="muted small">Pas encore disponible : VRChat ne donne pas l'adresse de sa boutique officielle à son API.
-        Elle reste visible dans le jeu (menu Boutique).</div></div>
+    <div class="tabs">
+      <button class="tabbtn ${SHOP.tab === 'spot' ? 'on' : ''}" data-stab2="spot">⭐ Vitrine VRChat</button>
+      <button class="tabbtn ${SHOP.tab === 'visited' ? 'on' : ''}" data-stab2="visited">🌍 Mondes visités</button>
     </div>
-    <h2>🌍 Boutiques des mondes que tu as visités</h2>
+    <div class="card note">👀 <b>Affichage seulement</b> : VRCLogs ne permet aucun achat, tout se passe dans VRChat.</div>
     <div id="shopBody"></div>`;
-  drawStores();
+  if (SHOP.tab === 'spot') drawSpotlight();
+  else drawStores();
 }
+
+// ⭐ La vitrine officielle : les mondes et groupes mis en avant par VRChat
+async function drawSpotlight() {
+  const box = $('shopBody');
+  if (!VRC.user) { box.innerHTML = '<div class="empty">Connecte ton compte VRChat (onglet 💜 Amis) pour voir la vitrine de la Marketplace.</div>'; return; }
+  if (!SHOP.spot && !SHOP.error) {
+    box.innerHTML = '<div class="empty">Chargement de la vitrine…</div>';
+    const r = await window.api.spotlight();
+    if (r.error) SHOP.error = r.error; else SHOP.spot = r;
+    if (currentView !== 'shop' || SHOP.tab !== 'spot') return;
+  }
+  if (SHOP.error) { $('shopBody').innerHTML = `<div class="empty">⚠️ ${esc(SHOP.error)}</div>`; return; }
+  const card = (kind, id) => `<div class="spotcard" data-spot="${kind}:${esc(id)}"><div class="simg"><span class="muted">⏳</span></div><div class="sname muted">…</div></div>`;
+  $('shopBody').innerHTML = `
+    <p class="muted small">La sélection officielle de la Marketplace VRChat (« Spotlight »)${SHOP.spot.updated ? `, mise à jour le ${fmtDate(Date.parse(SHOP.spot.updated))}` : ''}. Clique sur un monde ou un groupe pour voir sa boutique.</p>
+    <h2>🌍 Mondes en vedette <span class="muted">(${SHOP.spot.worlds.length})</span></h2>
+    <div class="spotgrid">${SHOP.spot.worlds.map(id => card('world', id)).join('')}</div>
+    <h2>👥 Groupes en vedette <span class="muted">(${SHOP.spot.groups.length})</span></h2>
+    <div class="spotgrid">${SHOP.spot.groups.map(id => card('group', id)).join('')}</div>`;
+  // On charge chaque fiche une par une (petite pause entre chaque, gérée par main.js)
+  for (const [kind, ids] of [['world', SHOP.spot.worlds], ['group', SHOP.spot.groups]]) {
+    for (const id of ids) {
+      const key = `${kind}:${id}`;
+      let b = SHOP.briefs.get(key);
+      if (!b) {
+        b = await (kind === 'world' ? window.api.worldBrief(id) : window.api.groupBrief(id));
+        if (!b.error) SHOP.briefs.set(key, b);
+      }
+      if (currentView !== 'shop' || SHOP.tab !== 'spot') return;
+      paintSpot(key, kind, b);
+    }
+  }
+}
+function paintSpot(key, kind, b) {
+  const el = document.querySelector(`[data-spot="${CSS.escape(key)}"]`);
+  if (!el) return;
+  if (b.error) { el.querySelector('.sname').textContent = '⚠️ indisponible'; return; }
+  el.querySelector('.simg').innerHTML = vimg(kind === 'world' ? b.thumb : (b.banner || b.icon));
+  el.querySelector('.sname').classList.remove('muted');
+  el.querySelector('.sname').innerHTML = `${kind === 'group' && b.icon ? vimg(b.icon, 'gicon') : ''}<span><b>${esc(b.name)}</b>
+    <span class="muted small">${kind === 'world' ? `par ${esc(b.author || '?')}${b.occupants ? ` · 👥 ${b.occupants}` : ''}` : `👥 ${Number(b.members || 0).toLocaleString('fr')} membres`}</span></span>`;
+  el.classList.toggle('nostore', !b.storeId);
+}
+async function openStoreModal(key) {
+  const b = SHOP.briefs.get(key);
+  if (!b) return;
+  const [kind, id] = key.split(':');
+  const link = kind === 'world' ? `https://vrchat.com/home/world/${id}` : `https://vrchat.com/home/group/${id}`;
+  showModal(`<h1>🛍️ ${esc(b.name)}</h1>
+    <p class="muted">${kind === 'world' ? '🌍 Monde' : '👥 Groupe'} · <a class="link" data-url="${link}">Voir sur VRChat ↗</a></p>
+    <div class="card note">👀 Affichage seulement : les achats se font dans VRChat.</div>
+    <div class="listings" id="modalListings"><span class="muted">${b.storeId ? 'Chargement de la boutique…' : 'Pas de boutique.'}</span></div>`);
+  if (!b.storeId) return;
+  let s = NEWS.stores.get(b.storeId);
+  if (!s) { s = await window.api.store(b.storeId); if (!s.error) NEWS.stores.set(b.storeId, s); }
+  if (!$('modalListings')) return;
+  if (s.error) { $('modalListings').innerHTML = `<span class="muted">⚠️ ${esc(s.error)}</span>`; return; }
+  if (s.seller) $('modalBody').querySelector('p.muted').insertAdjacentHTML('beforeend', ` · Vendu par <b>${esc(s.seller)}</b>`);
+  $('modalListings').innerHTML = s.listings.slice().sort((a, b2) => Date.parse(b2.created || 0) - Date.parse(a.created || 0)).map(listingHtml).join('')
+    || '<span class="muted">Boutique vide pour l\'instant.</span>';
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-stab2]');
+  if (t) { SHOP.tab = t.dataset.stab2; renderShop(); return; }
+  const s = e.target.closest('[data-spot]');
+  if (s) openStoreModal(s.dataset.spot);
+});
 
 async function drawNews() {
   const box = $('newsBody');
@@ -229,7 +297,6 @@ function drawStores() {
   }
   const stores = [...seen.values()].sort((a, b) => b.last - a.last);
   box.innerHTML = `
-    <div class="card note">👀 <b>Affichage seulement</b> : VRCLogs ne permet aucun achat, tout se passe dans VRChat.</div>
     ${!VRC.user ? '<div class="empty">Connecte ton compte VRChat (onglet 💜 Amis) pour voir le contenu des boutiques.</div>' : ''}
     ${stores.map(st => `
       <div class="card storecard" id="store-${esc(st.id)}">
@@ -250,7 +317,11 @@ async function loadStore(id) {
   if (s.error) { box.innerHTML = `<span class="muted">⚠️ ${esc(s.error)}</span>`; return; }
   box.previousElementSibling.insertAdjacentHTML('beforeend', s.seller ? ` · Vendu par <b>${esc(s.seller)}</b>` : '');
   const list = s.listings.slice().sort((a, b) => Date.parse(b.created || 0) - Date.parse(a.created || 0));
-  box.innerHTML = list.map(l => {
+  box.innerHTML = list.map(listingHtml).join('') || '<span class="muted">Boutique vide pour l\'instant.</span>';
+}
+
+// Un article de boutique (utilisé dans la vitrine ET pour les mondes visités)
+function listingHtml(l) {
     const isNew = l.created && Date.now() - Date.parse(l.created) < 14 * 86400000;
     return `<div class="listing">
       <div class="limg">${l.image ? vimg(l.image) : '🛍️'}</div>
@@ -262,6 +333,5 @@ async function loadStore(id) {
       </div>
       <div class="price">💳 ${Number(l.price || 0).toLocaleString('fr')}<span>crédits VRChat</span>${l.vrcPlusPrice ? `<span class="muted">VRC+ : ${l.vrcPlusPrice}</span>` : ''}</div>
     </div>`;
-  }).join('') || '<span class="muted">Boutique vide pour l\'instant.</span>';
 }
 

@@ -228,6 +228,9 @@ ipcMain.handle('steam:friends', safe((_e, { steamId, force }) =>
   steam.friends(steamId, force, (done, total) => win?.webContents.send('steam:progress', { done, total }))));
 ipcMain.handle('news:get', safe((_e, force) => getNews(force)));
 ipcMain.handle('vrc:store', safe((_e, storeId) => vrc.store(storeId)));
+ipcMain.handle('vrc:spotlight', safe(() => vrc.spotlight()));
+ipcMain.handle('vrc:worldBrief', safe((_e, id) => vrc.world(id)));
+ipcMain.handle('vrc:groupBrief', safe((_e, id) => vrc.group(id)));
 
 let avatarSearch = null;
 ipcMain.handle('avatar:lookup', (_e, { name, author }) => avatarSearch.lookup(name, author));
@@ -328,7 +331,9 @@ function createWindow() {
         ['avatar-public', `document.querySelector('.avrow.public')?.click()`],
         ['steam', `hideModal(); goTo('steam'); new Promise(r => setTimeout(r, 3000))`],
         ['news', `goTo('news'); new Promise(r => setTimeout(r, 4000))`],
-        ['shop', `goTo('shop'); new Promise(r => setTimeout(r, 4000))`],
+        ['shop', `goTo('shop'); new Promise(r => setTimeout(r, 15000))`],
+        ['shop-store', `document.querySelector('.spotcard:not(.nostore)')?.click(); new Promise(r => setTimeout(r, 3000))`],
+        ['shop-visited', `hideModal(); SHOP.tab = 'visited'; renderShop(); new Promise(r => setTimeout(r, 2000))`],
         ['settings-look', `openSettings('look')`],
         ['theme-neon', `document.querySelector('[data-theme-pick="neon"]').click()`],
         ['theme-clair', `document.querySelector('[data-theme-pick="clair"]').click(); hideModal(); goTo('live')`],

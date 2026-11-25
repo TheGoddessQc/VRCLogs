@@ -216,6 +216,23 @@ class VRChat {
       worldCount: p.totalPublicWorldsCount || 0,
     };
   }
+  // La VITRINE OFFICIELLE de la Marketplace ("Spotlight") : les mondes et groupes
+  // que VRChat met en avant. Trouvé en observant ce que le site vrchat.com demande.
+  async spotlight() {
+    const r = await this.request('GET', '/infoPush?include=user-all&require=marketplace-page%2Ccontent-compatibility-pc');
+    const d = (r || [])[0]?.data || {};
+    const cat = type => (d.categories || []).find(c => c.type === type)?.ids || [];
+    return { worlds: cat('worlds'), groups: cat('groups'), updated: r?.[0]?.updatedAt || null };
+  }
+  // Petite fiche d'un groupe (avec l'identifiant de sa boutique)
+  async group(id) {
+    if (!this.groups) this.groups = new Map();
+    if (this.groups.has(id)) return this.groups.get(id);
+    const g = await this.request('GET', `/groups/${encodeURIComponent(id)}?includeRoles=false&purpose=other`);
+    const s = { id, name: g.name, icon: g.iconUrl, banner: g.bannerUrl, members: g.memberCount, storeId: g.storeId || null, shortCode: g.shortCode, discriminator: g.discriminator };
+    this.groups.set(id, s);
+    return s;
+  }
   // Boutique d'un monde ou d'un groupe (LECTURE SEULE : aucun achat possible depuis VRCLogs)
   async store(storeId) {
     const s = await this.request('GET', `/economy/store?storeId=${encodeURIComponent(storeId)}&hydrateListings=true`);
@@ -233,7 +250,7 @@ class VRChat {
   async world(id) {
     if (this.worlds.has(id)) return this.worlds.get(id);
     const w = await this.request('GET', `/worlds/${encodeURIComponent(id)}`);
-    const s = { id, name: w.name, thumb: w.thumbnailImageUrl, author: w.authorName };
+    const s = { id, name: w.name, thumb: w.thumbnailImageUrl, author: w.authorName, storeId: w.storeId || null, occupants: w.occupants || 0 };
     this.worlds.set(id, s);
     return s;
   }
