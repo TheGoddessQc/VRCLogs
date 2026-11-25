@@ -1,7 +1,7 @@
 {
   "name": "vrclogs",
   "productName": "VRCLogs",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Logs avancés pour VRChat : instances en direct, historique des mondes, personnes rencontrées, statistiques.",
   "author": "TheGoddessQc",
   "license": "MIT",
