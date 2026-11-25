@@ -66,6 +66,8 @@ traduis la colonne de droite, et propose-la dans une *Pull Request* !
 - **Steam** : les heures de jeu sont lues dans les fichiers de Steam sur ton PC. Pour les amis Steam, tu peux ajouter
   ta propre clé API Steam (optionnelle) : elle est **chiffrée par Windows** et envoyée **uniquement à Steam**.
 - Les boutiques sont en **affichage seulement** : aucun achat n'est possible depuis VRCLogs.
+- **Mises à jour** : VRCLogs regarde seulement la dernière version publiée sur GitHub (rien n'est envoyé).
+  Désactivable dans *Paramètres → Mises à jour*.
 - VRCLogs **ne modifie pas** le jeu et n'interagit pas avec lui.
 - Comme VRCX, VRCLogs utilise l'API web de VRChat, qui n'est pas officiellement documentée.
 

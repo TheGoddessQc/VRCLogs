@@ -25,7 +25,7 @@ const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? d
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const FAVS = new Set(load('favs', []));
 const META = load('meta', {}); // { cléJoueur: { note: '...', tags: ['ami', ...] } }
-const SETTINGS = Object.assign({ theme: 'goddess', compact: false, anim: true, avtrdb: true }, load('settings', {}));
+const SETTINGS = Object.assign({ theme: 'goddess', compact: false, anim: true, avtrdb: true, autoUpdate: true }, load('settings', {}));
 const ALERTS = Object.assign({ favs: true, friendOnline: true, newPeople: false, minMeets: 0, tags: [], silent: false }, load('alerts', {}));
 
 // ---------- Petits outils ----------
@@ -1284,9 +1284,11 @@ function applySettings() {
 }
 function openSettings(tab = settingsTab) {
   settingsTab = tab;
-  const tabs = [['look', '🎨 Apparence'], ['alerts', '🔔 Alertes'], ['data', '💾 Données']];
+  const tabs = [['look', '🎨 Apparence'], ['alerts', '🔔 Alertes'], ['data', '💾 Données'], ['update', '🔄 Mises à jour']];
   let body = '';
-  if (tab === 'look') {
+  if (tab === 'update') {
+    body = updateTabHtml();
+  } else if (tab === 'look') {
     const p = currentPalette();
     body = `
       <h2>🌍 Langue</h2>
@@ -1342,6 +1344,7 @@ function openSettings(tab = settingsTab) {
   showModal(`<h1>⚙️ Paramètres</h1>
     <div class="tabs">${tabs.map(([id, n]) => `<button class="tabbtn ${id === tab ? 'on' : ''}" data-stab="${id}">${n}</button>`).join('')}</div>
     ${body}`);
+  if ($('updCheck')) $('updCheck').onclick = () => checkUpdate(true);
   if ($('palCopy')) {
     // Code de partage : "VRCLogs:#fond-#cartes-#texte-#principale-#secondaire"
     $('palCopy').onclick = async () => {
@@ -1370,6 +1373,61 @@ function openSettings(tab = settingsTab) {
   if ($('openData')) $('openData').onclick = () => window.api.openDataFolder();
   if ($('openLogs')) $('openLogs').onclick = () => window.api.openLogFolder();
 }
+// ---------------------------------------------------------------------
+//  🔄 MISES À JOUR
+// ---------------------------------------------------------------------
+const UPDATE = { current: '', result: null, checking: false, at: 0 };
+
+// Les notes de version GitHub sont écrites en "Markdown" : on en garde l'essentiel
+function miniMarkdown(md) {
+  return esc(md).split('\n').map(line => {
+    let l = line.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>');
+    if (/^#{1,4} /.test(l)) return `<div class="mdh">${l.replace(/^#{1,4} /, '')}</div>`;
+    if (/^\s*[-*] /.test(l)) return `<div class="mdli">• ${l.replace(/^\s*[-*] /, '')}</div>`;
+    if (/^&gt; /.test(l)) return `<div class="mdq">${l.replace(/^&gt; /, '')}</div>`;
+    if (/^---+$/.test(l.trim())) return '<hr>';
+    return l.trim() ? `<div>${l}</div>` : '';
+  }).join('').replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, (m, txt, url) => `<a class="link" data-url="${url}">${txt}</a>`);
+}
+
+function updateTabHtml() {
+  const r = UPDATE.result;
+  let status = '';
+  if (UPDATE.checking) status = '<div class="card">⏳ Vérification…</div>';
+  else if (r?.error) status = `<div class="card">⚠️ Impossible de vérifier : ${esc(r.error)}</div>`;
+  else if (r && !r.newer) status = `<div class="card upd-ok">✅ Tu as la dernière version (${esc(r.current)}).</div>`;
+  else if (r?.newer) status = `
+    <div class="card upd-new">
+      <div class="upd-title">✨ Nouvelle version disponible : ${esc(r.latest)}</div>
+      <div class="muted small">Publiée le ${fmtDate(Date.parse(r.date))}${r.size ? ` · ${(r.size / 1048576).toFixed(0)} Mo` : ''}</div>
+      <div class="fbtns">
+        <a class="primary btn" data-url="${esc(r.download)}">⬇️ Télécharger la mise à jour</a>
+        <a class="ghost btn" data-url="${esc(r.page)}">Voir sur GitHub ↗</a>
+      </div>
+      <p class="muted small">Lance le fichier téléchargé et installe par-dessus : ton historique, tes notes et tes favoris sont conservés.</p>
+    </div>
+    ${r.notes ? `<h2>📝 Nouveautés de cette version</h2><div class="card mdnotes">${miniMarkdown(r.notes)}</div>` : ''}`;
+  return `
+    <div class="opt"><span>📦 Version installée</span><b class="notr">${esc(UPDATE.current)}</b></div>
+    <div class="fbtns"><button class="ghost" id="updCheck" ${UPDATE.checking ? 'disabled' : ''}>🔍 Vérifier maintenant</button>
+      ${UPDATE.at ? `<span class="muted small">Dernière vérification : ${ago(UPDATE.at)}</span>` : ''}</div>
+    ${status}
+    <h2>Options</h2>
+    <label class="opt"><span>🔁 Vérifier automatiquement au démarrage <span class="muted">— rien n'est envoyé, on regarde seulement la dernière version sur GitHub</span></span><input type="checkbox" data-set="autoUpdate" ${SETTINGS.autoUpdate ? 'checked' : ''}></label>`;
+}
+
+async function checkUpdate(manual) {
+  UPDATE.checking = true;
+  if (manual && settingsTab === 'update' && !$('modal').classList.contains('hidden')) openSettings('update');
+  UPDATE.result = await window.api.checkUpdate();
+  UPDATE.checking = false;
+  UPDATE.at = Date.now();
+  // Une pastille sur le bouton Paramètres quand une mise à jour attend
+  $('openSettings').classList.toggle('has-update', !!UPDATE.result?.newer);
+  if (!manual && UPDATE.result?.newer) toast(`✨ VRCLogs ${esc(UPDATE.result.latest)} est disponible !<br>Va dans ⚙️ Paramètres → 🔄 Mises à jour.`);
+  if (settingsTab === 'update' && !$('modal').classList.contains('hidden')) openSettings('update');
+}
+
 // Quand on modifie une option dans les paramètres
 document.addEventListener('input', e => {
   // Un sélecteur de couleur de "Ma palette" a changé : on passe en thème personnalisé
@@ -1526,6 +1584,8 @@ applySettings();
   EVENTS = init.events;
   LIVE = init.live;
   build();
+  UPDATE.current = await window.api.version();
+  if (SETTINGS.autoUpdate) setTimeout(() => checkUpdate(false), 5000); // vérifie 5 s après le démarrage
   setVRC(await window.api.vrc.get());
   setStatus();
   render();

@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
   onStatus: cb => ipcRenderer.on('status', (_e, s) => cb(s)),
   openUrl: url => ipcRenderer.invoke('open-url', url),
   setLang: lang => ipcRenderer.invoke('set-lang', lang),
+  version: () => ipcRenderer.invoke('app:version'),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
   openLogFolder: () => ipcRenderer.invoke('open-log-folder'),
   openDataFolder: () => ipcRenderer.invoke('open-data-folder'),
   exportCsv: text => ipcRenderer.invoke('export-csv', text),

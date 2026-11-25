@@ -248,6 +248,34 @@ ipcMain.handle('vrc:myGroups', safe(() => vrc.myGroups()));
 ipcMain.handle('vrc:groupInstances', safe(() => vrc.groupInstances()));
 ipcMain.handle('vrc:groupDetails', safe((_e, id) => vrc.groupDetails(id)));
 
+// ---------- Mises à jour ----------
+// On demande à GitHub la dernière version publiée (page publique, rien n'est envoyé sur toi)
+const REPO = 'TheGoddessQc/VRCLogs';
+// "0.10.0" est plus récent que "0.9.2" : on compare nombre par nombre, pas comme du texte
+function isNewer(a, b) {
+  const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
+ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('update:check', safe(async () => {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+    headers: { 'User-Agent': UA, Accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`GitHub ${res.status}`);
+  const r = await res.json();
+  const latest = String(r.tag_name || '').replace(/^v/, '');
+  const exe = (r.assets || []).find(a => /\.exe$/i.test(a.name));
+  return {
+    current: app.getVersion(), latest, newer: isNewer(latest, app.getVersion()),
+    page: r.html_url, download: exe?.browser_download_url || r.html_url, size: exe?.size || 0,
+    date: r.published_at, notes: r.body || '',
+  };
+}));
+
 let avatarSearch = null;
 ipcMain.handle('avatar:lookup', (_e, { name, author }) => avatarSearch.lookup(name, author));
 ipcMain.handle('vrc:avatars', async () => {
@@ -367,6 +395,8 @@ function createWindow() {
         ['shop-store', `document.querySelector('.spotcard:not(.nostore)')?.click(); new Promise(r => setTimeout(r, 3000))`],
         ['shop-visited', `hideModal(); SHOP.tab = 'visited'; renderShop(); new Promise(r => setTimeout(r, 2000))`],
         ['settings-look', `openSettings('look')`],
+        ['update', `openSettings('update'); checkUpdate(true).then(() => new Promise(r => setTimeout(r, 500)))`],
+        ['update-new', `UPDATE.result = { current: '0.3.0', latest: '0.4.0', newer: true, page: 'https://github.com/TheGoddessQc/VRCLogs/releases', download: 'https://github.com/TheGoddessQc/VRCLogs/releases', size: 87677654, date: new Date().toISOString(), notes: '## Test\\n\\n**Nouveautés**\\n- Une fonction\\n- Une autre\\n\\n> Note' }; $('openSettings').classList.add('has-update'); openSettings('update')`],
         ['theme-neon', `document.querySelector('[data-theme-pick="neon"]').click()`],
         ['theme-clair', `document.querySelector('[data-theme-pick="clair"]').click(); hideModal(); goTo('live')`],
         ['theme-random', `openSettings('look'); document.getElementById('palRandom').click()`],

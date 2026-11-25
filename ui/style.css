@@ -220,6 +220,22 @@ body.compact main { padding: 16px 20px; }
 .theme .dots { display: flex; justify-content: center; gap: 3px; margin-bottom: 6px; }
 .theme .dots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff3; }
 
+/* Mises à jour */
+#openSettings { position: relative; }
+#openSettings.has-update::after {
+  content: ''; position: absolute; top: 8px; right: 10px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent2); box-shadow: 0 0 0 3px var(--card), 0 0 10px var(--accent2);
+}
+.upd-ok { border-color: var(--green); margin-top: 10px; }
+.upd-new { border-color: var(--accent); margin-top: 10px; background: linear-gradient(135deg, var(--hero), var(--card)); }
+.upd-title { font-size: 17px; font-weight: 800; }
+.primary.btn { padding: 9px 16px; text-decoration: none; display: inline-block; }
+.mdnotes { font-size: 13px; line-height: 1.7; max-height: 320px; overflow-y: auto; }
+.mdnotes .mdh { font-weight: 800; margin-top: 8px; color: var(--accent); }
+.mdnotes .mdli { padding-left: 8px; }
+.mdnotes .mdq { border-left: 3px solid var(--accent); padding-left: 10px; color: var(--muted); }
+.mdnotes hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+
 /* Choix de la langue */
 .langs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .langbtn { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer; font-size: 13px; }
